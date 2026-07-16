@@ -1,4 +1,6 @@
 import logging
+import os
+import signal
 try:
     import secrets
 except ImportError:
@@ -60,8 +62,18 @@ class Worker(object):
         return secrets.token_urlsafe(nbytes=32) if secrets else uuid4().hex
 
     def set_handler(self, handler):
-        if not self.handler:
-            self.handler = handler
+        self.handler = handler
+
+    def detach_handler(self, handler=None):
+        if handler is not None and handler is not self.handler:
+            return
+        if self.handler:
+            try:
+                self.loop.remove_handler(self.fd)
+            except Exception:
+                pass
+            self.handler = None
+            self.mode = IOLoop.READ
 
     def update_handler(self, mode):
         if self.mode != mode:
@@ -132,3 +144,55 @@ class Worker(object):
 
         clear_worker(self, clients)
         logging.debug(clients)
+
+
+class LocalProcess(object):
+    def __init__(self, proc):
+        self.proc = proc
+
+    def close(self):
+        if self.proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(self.proc.pid), signal.SIGHUP)
+            except OSError:
+                pass
+
+
+class PTYChannel(object):
+    closed = False
+
+    def __init__(self, fd):
+        self.fd = fd
+
+    def fileno(self):
+        return self.fd
+
+    def recv(self, size):
+        try:
+            return os.read(self.fd, size)
+        except OSError:
+            self.closed = True
+            raise
+
+    def send(self, data):
+        if isinstance(data, str):
+            data = data.encode()
+        try:
+            return os.write(self.fd, data)
+        except OSError:
+            self.closed = True
+            raise
+
+    def resize_pty(self, cols, rows):
+        import fcntl
+        import struct
+        import termios
+        data = struct.pack('HHHH', int(rows), int(cols), 0, 0)
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, data)
+
+    def close(self):
+        self.closed = True
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass

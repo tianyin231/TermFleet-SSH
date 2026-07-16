@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import unittest
 import paramiko
 
@@ -8,7 +10,8 @@ from tests.utils import read_file, make_tests_data_path
 from webssh import handler
 from webssh import worker
 from webssh.handler import (
-    IndexHandler, MixinHandler, WsockHandler, PrivateKey, InvalidValueError, SSHClient
+    IndexHandler, MixinHandler, WsockHandler, PrivateKey, InvalidValueError,
+    SSHClient, parse_ssh_config_hosts
 )
 
 try:
@@ -317,7 +320,52 @@ class TestWsockHandler(unittest.TestCase):
         WsockHandler.on_message(obj, b'{"data": "somestuff"}')
         obj.close.assert_called_with(reason='Worker closed')
 
+    def test_late_close_does_not_detach_rebound_worker(self):
+        request = HTTPServerRequest(uri='/')
+        obj = Mock(spec=WsockHandler, request=request)
+        obj.src_addr = ("127.0.0.1", 8888)
+        obj.close_reason = 'client disconnected'
+
+        current_handler = Mock()
+        fake_worker = Mock()
+        fake_worker.handler = current_handler
+        obj.worker_ref = lambda: fake_worker
+
+        WsockHandler.on_close(obj)
+
+        fake_worker.detach_handler.assert_not_called()
+        fake_worker.close.assert_not_called()
+
 class TestIndexHandler(unittest.TestCase):
+    def test_parse_ssh_config_hosts(self):
+        fd, filename = tempfile.mkstemp()
+        old_sshconfig = getattr(options, 'sshconfig', '~/.ssh/config')
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(
+                    'Host prod\n'
+                    '  HostName 10.0.0.5\n'
+                    '  User root\n'
+                    '  Port 2222\n'
+                    '  IdentityFile ~/.ssh/id_ed25519\n'
+                    'Host *.internal\n'
+                    '  HostName 10.0.0.6\n'
+                    'Host bad\n'
+                    '  HostName http://example.com\n'
+                )
+            options.sshconfig = filename
+            hosts = parse_ssh_config_hosts()
+        finally:
+            options.sshconfig = old_sshconfig
+            os.unlink(filename)
+
+        self.assertEqual(len(hosts), 1)
+        self.assertEqual(hosts[0]['alias'], 'prod')
+        self.assertEqual(hosts[0]['hostname'], '10.0.0.5')
+        self.assertEqual(hosts[0]['username'], 'root')
+        self.assertEqual(hosts[0]['port'], 2222)
+        self.assertTrue(hosts[0]['has_identity_file'])
+
     def test_null_in_encoding(self):
         handler = Mock(spec=IndexHandler)
 
@@ -337,4 +385,3 @@ class TestIndexHandler(unittest.TestCase):
 
         encoding = IndexHandler.get_default_encoding(handler, ssh)
         self.assertEqual("utf-8", encoding)
-

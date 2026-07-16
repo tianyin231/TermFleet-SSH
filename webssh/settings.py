@@ -51,6 +51,8 @@ define('font', default='', help='custom font filename')
 define('encoding', default='',
        help='''The default character encoding of ssh servers.
 Example: --encoding='utf-8' to solve the problem with some switches&routers''')
+define('sshconfig', default='~/.ssh/config',
+       help='OpenSSH config file used to discover local hosts')
 define('version', type=bool, help='Show version information',
        callback=print_version)
 

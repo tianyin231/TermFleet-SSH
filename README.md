@@ -1,192 +1,213 @@
-## WebSSH
+# TermFleet-SSH
 
-[![python](https://github.com/huashengdun/webssh/actions/workflows/python.yml/badge.svg)](https://github.com/huashengdun/webssh/actions/workflows/python.yml)
-[![codecov](https://raw.githubusercontent.com/huashengdun/webssh/coverage-badge/coverage.svg)](https://raw.githubusercontent.com/huashengdun/webssh/coverage-badge/coverage.svg)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/webssh.svg)
-![PyPI](https://img.shields.io/pypi/v/webssh.svg)
+TermFleet-SSH 是一个基于 Web 的 SSH 集群管理控制台，面向需要同时连接、分组、广播操作多台主机的场景。后端使用 Tornado、Paramiko 和 xterm.js，前端提供工作组、终端窗口、SSH 配置识别、本机终端、操作日志和中英文切换。
 
+## 项目声明
 
-### Introduction
+本项目基于原 WebSSH 项目改造，原项目地址：
 
-A simple web application to be used as an ssh client to connect to your ssh servers. It is written in Python, base on tornado, paramiko and xterm.js.
+https://github.com/huashengdun/webssh
 
-### Features
+## 主要功能
 
-* SSH password authentication supported, including empty password.
-* SSH public-key authentication supported, including DSA RSA ECDSA Ed25519 keys.
-* Encrypted keys supported.
-* Two-Factor Authentication (time-based one-time password) supported.
-* Fullscreen terminal supported.
-* Terminal window resizable.
-* Auto detect the ssh server's default encoding.
-* Modern browsers including Chrome, Firefox, Safari, Edge, Opera supported.
+- 多终端窗口管理，支持拖动、重命名、最大化、关闭和重新连接。
+- 工作组管理，支持新建、删除、重命名、拖动排序、自由拉伸和工作组全屏。
+- 工作组布局会自动利用可用空间，手动调整后的分组尺寸会被保留。
+- 刷新页面后恢复仍在服务端存活的终端窗口。
+- 持久化工作组名称、顺序、宽高比例、终端所属分组和终端窗口高度。
+- 支持普通 SSH 表单连接、私钥文件、私钥口令、TOTP。
+- 后端读取 OpenSSH 配置文件，默认读取 `~/.ssh/config`。
+- “已识别主机”支持填入、单台打开、选择分组后打开全部。
+- 支持打开本机终端，不需要 SSH。
+- 支持按工作组广播命令和常用组合键，例如 `Ctrl+C`、`Ctrl+D`、`Ctrl+Z`、`Ctrl+L`、`Tab`、`Esc`。
+- 终端标题区显示 WebSocket 延迟，并按延迟自动变色。
+- 系统设置支持调整最多终端数、终端字号、默认终端高度、广播回车和断开确认。
+- 操作日志以文本日志形式展示，入口位于右上角。
+- 支持中文和英文界面切换。
 
+## 环境要求
 
-### Preview
+- Python 3.10+
+- 现代浏览器，例如 Chrome、Edge、Firefox、Safari
+- 需要远程 SSH 时，服务端应能访问目标主机的 SSH 端口
 
-![Login](preview/login.png)
-![Terminal](preview/terminal.png)
+## 安装
 
-
-### How it works
-```
-+---------+     http     +--------+    ssh    +-----------+
-| browser | <==========> | webssh | <=======> | ssh server|
-+---------+   websocket  +--------+    ssh    +-----------+
-```
-
-### Requirements
-
-* Python 3.10+
-
-
-### Quickstart
-
-1. Install this app, run command `pip install webssh`
-2. Start a webserver, run command `wssh`
-3. Open your browser, navigate to `127.0.0.1:8888`
-4. Input your data, submit the form.
-
-
-### Server options
+开发环境建议直接在项目目录安装依赖：
 
 ```bash
-# start a http server with specified listen address and listen port
-wssh --address='2.2.2.2' --port=8000
+python -m pip install -r requirements.txt
+```
 
-# start a https server, certfile and keyfile must be passed
+也可以按包方式安装：
+
+```bash
+python -m pip install .
+```
+
+## 启动
+
+默认监听 `0.0.0.0:8888`：
+
+```bash
+wssh
+```
+
+指定监听地址和端口：
+
+```bash
+wssh --address='127.0.0.1' --port=8888
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8888
+```
+
+## 常用启动参数
+
+```bash
+# 指定监听地址和端口
+wssh --address='127.0.0.1' --port=8888
+
+# 指定 HTTPS 证书
 wssh --certfile='/path/to/cert.crt' --keyfile='/path/to/cert.key'
 
-# missing host key policy
+# 指定 SSH host key 策略：reject、autoadd、warning
 wssh --policy=reject
 
-# logging level
-wssh --logging=debug
+# 指定已识别主机使用的 OpenSSH 配置文件
+wssh --sshconfig='~/.ssh/config'
 
-# log to file
-wssh --log-file-prefix=main.log
+# 设置单个客户端最多同时连接的终端数
+wssh --maxconn=50
 
-# more options
+# 指定默认字符编码
+wssh --encoding='utf-8'
+
+# 查看全部参数
 wssh --help
 ```
 
-### Browser console
+## 使用方式
 
-```javascript
-// connect to your ssh server
-wssh.connect(hostname, port, username, password, privatekey, passphrase, totp);
+### 连接 SSH 主机
 
-// pass an object to wssh.connect
-var opts = {
-  hostname: 'hostname',
-  port: 'port',
-  username: 'username',
-  password: 'password',
-  privatekey: 'the private key text',
-  passphrase: 'passphrase',
-  totp: 'totp'
-};
-wssh.connect(opts);
+在左侧连接面板填写：
 
-// without an argument, wssh will use the form data to connect
-wssh.connect();
+- 主机名或 IP
+- 用户名
+- 端口，默认 `22`
+- 密码，或选择私钥文件
+- 私钥口令和 TOTP，按需填写
+- 目标工作组
 
-// set a new encoding for client to use
-wssh.set_encoding(encoding);
+点击“连接”后会在目标工作组中创建终端窗口。
 
-// reset encoding to use the default one
-wssh.reset_encoding();
+### 使用 SSH 配置识别主机
 
-// send a command to the server
-wssh.send('ls -l');
+程序会通过后端读取 OpenSSH 配置文件，默认路径为：
+
+```text
+~/.ssh/config
 ```
 
-### Custom Font
+可以通过启动参数修改：
 
-To use custom font, put your font file in the directory `webssh/static/css/fonts/` and restart the server.
-
-### URL Arguments
-
-Support passing arguments by url (query or fragment) like following examples:
-
-Passing form data (password must be encoded in base64, privatekey not supported)
 ```bash
-http://localhost:8888/?hostname=xx&username=yy&password=str_base64_encoded
+wssh --sshconfig='/path/to/ssh_config'
 ```
 
-Passing a terminal background color
+识别出的主机会显示在“已识别主机”区域。每台主机可以：
+
+- “填入”：把主机信息填入连接表单。
+- “打开”：直接打开该主机。
+- “打开全部”：选择一个工作组后，将全部识别主机打开到该工作组。
+
+出于安全考虑，前端不会读取或展示私钥内容。私钥路径由后端根据 SSH 配置读取和使用。
+
+### 管理工作组
+
+顶部“新建分组”可以创建工作组。工作组支持：
+
+- 双击或编辑名称重命名
+- 拖动排序
+- 右下角拖拽调整宽高
+- 工作组全屏查看
+- 删除分组，已有终端会移动到相邻分组
+
+工作组名称、顺序和手动调整后的比例会保存到浏览器本地，刷新后恢复。
+
+### 管理终端窗口
+
+每个终端窗口支持：
+
+- 拖动到其他工作组
+- 重命名
+- 重新连接
+- 最大化
+- 关闭
+- 手动调整终端高度
+
+刷新页面后，仍在服务端存活的会话会自动恢复。手动关闭窗口会真正断开对应 SSH 会话或本机终端进程。
+
+### 广播命令
+
+每个工作组顶部都有广播输入框。输入命令并发送，会广播到该工作组内所有已连接终端。
+
+组合键可以通过控制键下拉框发送，例如：
+
+- `Ctrl+C`
+- `Ctrl+D`
+- `Ctrl+Z`
+- `Ctrl+L`
+- `Tab`
+- `Esc`
+
+### 本机终端
+
+右上角“本机终端”会打开服务端本机 shell。它和 SSH 终端使用相同的窗口、分组、日志、重连和关闭逻辑。
+
+### 网络延迟
+
+终端标题区会显示当前 WebSocket 延迟：
+
+- 低延迟为绿色
+- 中等延迟为黄色
+- 高延迟或离线为红色
+
+### 系统设置和日志
+
+左侧系统设置支持调整：
+
+- 最多终端数
+- 终端字号
+- 终端默认高度
+- 广播命令是否自动回车
+- 断开全部前是否确认
+
+右上角“日志”会打开全屏操作日志。
+
+## Docker
+
+启动：
+
 ```bash
-http://localhost:8888/#bgcolor=green
-```
-
-Passing a terminal font color
-```bash
-http://localhost:8888/#fontcolor=red
-```
-
-Passing a user defined title
-```bash
-http://localhost:8888/?title=my-ssh-server
-```
-
-Passing an encoding
-```bash
-http://localhost:8888/#encoding=gbk
-```
-
-Passing a font size
-```bash
-http://localhost:8888/#fontsize=24
-```
-
-Passing a command executed right after login
-```bash
-http://localhost:8888/?command=pwd
-```
-
-Passing a terminal type
-```bash
-http://localhost:8888/?term=xterm-256color
-```
-
-### Use Docker
-
-Start up the app
-```
 docker-compose up
 ```
 
-Tear down the app
-```
+停止：
+
+```bash
 docker-compose down
 ```
 
-### Tests
+## Nginx 反向代理
 
-Requirements
-```
-pip install pytest pytest-cov codecov flake8 mock
-```
+WebSocket 需要透传 Upgrade 头：
 
-Use unittest to run all tests
-```
-python -m unittest discover tests
-```
-
-Use pytest to run all tests
-```
-python -m pytest tests
-```
-
-### Deployment
-
-Running behind an Nginx server
-
-```bash
-wssh --address='127.0.0.1' --port=8888 --policy=reject
-```
 ```nginx
-# Nginx config example
 location / {
     proxy_pass http://127.0.0.1:8888;
     proxy_http_version 1.1;
@@ -199,14 +220,16 @@ location / {
 }
 ```
 
-Running as a standalone server
+建议在生产环境启用 HTTPS，并使用 `--policy=reject` 配合可信 `known_hosts`。
+
+## 测试
+
 ```bash
-wssh --port=8080 --sslport=4433 --certfile='cert.crt' --keyfile='cert.key' --xheaders=False --policy=reject
+python -m unittest discover tests
 ```
 
+或：
 
-### Tips
-
-* For whatever deployment choice you choose, don't forget to enable SSL.
-* By default plain http requests from a public network will be either redirected or blocked and being redirected takes precedence over being blocked.
-* Try to use reject policy as the missing host key policy along with your verified known_hosts, this will prevent man-in-the-middle attacks. The idea is that it checks the system host keys file("~/.ssh/known_hosts") and the application host keys file("./known_hosts") in order, if the ssh server's hostname is not found or the key is not matched, the connection will be aborted.
+```bash
+python -m pytest tests
+```

@@ -1,99 +1,1405 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <title> WebSSH </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TermFleet-SSH</title>
     <link href="static/img/favicon.png" rel="icon" type="image/png">
-    <link href="static/css/bootstrap.min.css" rel="stylesheet" type="text/css"/>
-    <link href="static/css/xterm.min.css" rel="stylesheet" type="text/css"/>
-    <link href="static/css/fullscreen.min.css" rel="stylesheet" type="text/css"/>
+    <link href="static/css/xterm.min.css" rel="stylesheet" type="text/css">
+    <link href="static/css/fullscreen.min.css" rel="stylesheet" type="text/css">
+    <!-- Web fonts are progressive enhancement; system fonts are used if offline. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      .row {
-        margin-top: 15px;
-        margin-bottom: 10px;
-      }
-
-      .container {
-        margin-top: 20px;
-      }
-
-      .btn {
-        margin-top: 15px;
-      }
-
-      .btn-danger {
-        margin-left: 5px;
-      }
+      /* Optional custom font served by the backend (offline friendly). */
       {% if font.family %}
       @font-face {
         font-family: '{{ font.family }}';
         src: url('{{ font.url }}');
       }
-
-      body {
-        font-family: '{{ font.family }}';
+      :root {
+        --mono: '{{ font.family }}', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       }
       {% end %}
+
+      :root {
+        color-scheme: light;
+        --bg-top: #ffffff;
+        --bg-mid: #f4f6fb;
+        --bg-bottom: #e9edf6;
+        --panel: rgba(255, 255, 255, 0.9);
+        --panel-solid: #ffffff;
+        --panel-soft: #f1f5f9;
+        --ink: #0f172a;
+        --ink-soft: #334155;
+        --muted: #475569;
+        --faint: #64748b;
+        --line: #dce3ef;
+        --line-strong: #cbd5e1;
+        --primary: #4f46e5;
+        --primary-strong: #3730a3;
+        --primary-tint: #eef2ff;
+        --accent: #16a34a;
+        --accent-strong: #15803d;
+        --accent-tint: #ecfdf5;
+        --danger: #dc2626;
+        --danger-tint: #fef2f2;
+        --warn: #d97706;
+        --terminal: #0a0f1f;
+        --terminal-head: #0f1729;
+        --terminal-line: #1e293b;
+        --terminal-ink: #dbeafe;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --shadow-sm: 0 4px 14px rgba(15, 23, 42, 0.06);
+        --shadow-md: 0 12px 30px rgba(15, 23, 42, 0.1);
+        --shadow-lg: 0 24px 60px rgba(2, 6, 23, 0.22);
+        --sans: "Fira Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        /* z-index scale: base 1, drag 40, topbar 30, overlay 50, toast 60 */
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--ink);
+        background:
+          radial-gradient(1200px 520px at 12% -8%, rgba(79, 70, 229, 0.1), transparent 60%),
+          radial-gradient(1000px 480px at 108% 4%, rgba(22, 163, 74, 0.08), transparent 55%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 46%, var(--bg-bottom) 100%);
+        background-attachment: fixed;
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      :focus-visible {
+        outline: 3px solid rgba(79, 70, 229, 0.32);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+
+      .skip-link {
+        position: absolute;
+        top: -56px;
+        left: 16px;
+        z-index: 60;
+        padding: 10px 14px;
+        color: #ffffff;
+        background: var(--primary);
+        border-radius: var(--radius-sm);
+        transition: top 180ms ease;
+      }
+
+      .skip-link:focus {
+        top: 16px;
+      }
+
+      .app-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        padding: 14px;
+        gap: 14px;
+      }
+
+      /* ---------- Top bar ---------- */
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        backdrop-filter: blur(14px);
+        z-index: 30;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        display: grid;
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        color: #ffffff;
+        background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+        border-radius: 12px;
+        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.32);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+      }
+
+      .brand p {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--accent);
+        border-radius: 999px;
+        box-shadow: 0 0 0 4px var(--accent-tint);
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .top-actions .btn-compact {
+        min-width: 42px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 14px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink-soft);
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 120ms ease;
+      }
+
+      .btn svg {
+        flex: 0 0 auto;
+      }
+
+      .btn:hover {
+        color: var(--primary-strong);
+        background: var(--primary-tint);
+        border-color: #c7d2fe;
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .btn-primary {
+        color: #ffffff;
+        background: var(--primary);
+        border-color: var(--primary);
+        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.28);
+      }
+
+      .btn-primary:hover {
+        color: #ffffff;
+        background: var(--primary-strong);
+        border-color: var(--primary-strong);
+      }
+
+      .btn-accent {
+        color: #ffffff;
+        background: var(--accent);
+        border-color: var(--accent);
+        box-shadow: 0 8px 18px rgba(22, 163, 74, 0.26);
+      }
+
+      .btn-accent:hover {
+        color: #ffffff;
+        background: var(--accent-strong);
+        border-color: var(--accent-strong);
+      }
+
+      .btn-danger {
+        color: var(--danger);
+        background: var(--danger-tint);
+        border-color: #fecaca;
+      }
+
+      .btn-danger:hover {
+        color: #ffffff;
+        background: var(--danger);
+        border-color: var(--danger);
+      }
+
+      .btn-icon {
+        width: 42px;
+        padding: 0;
+      }
+
+      .btn-sm {
+        min-height: 36px;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
+      .btn-lang {
+        min-width: 74px;
+      }
+
+      /* ---------- Main body ---------- */
+      .body {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        gap: 14px;
+      }
+
+      /* ---------- Sidebar ---------- */
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 340px;
+        width: 340px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition: flex-basis 220ms ease, width 220ms ease;
+      }
+
+      .app-shell.sidebar-collapsed .sidebar {
+        flex-basis: 0;
+        width: 0;
+        border-width: 0;
+        margin-left: -14px;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      .sidebar-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 16px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .sidebar-head h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .sidebar-head p {
+        margin: 2px 0 0;
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .sidebar-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 16px;
+      }
+
+      .connect-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        color: var(--ink-soft);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .field input,
+      .field select {
+        width: 100%;
+        min-height: 42px;
+        color: var(--ink);
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        padding: 10px 12px;
+        transition: border-color 160ms ease, box-shadow 160ms ease;
+      }
+
+      .field input:focus,
+      .field select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+      }
+
+      .field input[type="file"] {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+      }
+
+      .file-picker {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .file-name {
+        overflow: hidden;
+        color: var(--faint);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .field-hint {
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 110px;
+        gap: 10px;
+      }
+
+      .status-panel {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        min-height: 44px;
+        margin-top: 4px;
+        padding: 10px 12px;
+        color: var(--muted);
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        white-space: pre-line;
+      }
+
+      .ssh-config-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .ssh-config-panel.is-collapsed .ssh-config-list {
+        display: none;
+      }
+
+      .ssh-config-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .ssh-config-head h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .ssh-config-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .ssh-host {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px;
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+      }
+
+      .ssh-host-name {
+        overflow: hidden;
+        font-weight: 700;
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ssh-host-meta {
+        overflow: hidden;
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ssh-config-empty {
+        padding: 10px 12px;
+        color: var(--faint);
+        background: var(--panel-soft);
+        border: 1px dashed var(--line-strong);
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+      }
+
+      .system-panel,
+      .log-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .log-panel {
+        display: none;
+      }
+
+      .panel-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .panel-title-row h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .setting-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .setting-row input[type="number"] {
+        width: 82px;
+        min-height: 34px;
+        padding: 6px 8px;
+        color: var(--ink);
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+      }
+
+      .setting-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+      }
+
+      .log-list {
+        display: grid;
+        gap: 6px;
+        max-height: 180px;
+        overflow-y: auto;
+      }
+
+      .log-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 55;
+        display: none;
+        padding: 16px;
+        background: rgba(2, 6, 23, 0.82);
+      }
+
+      .log-overlay.is-open {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .log-overlay-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: #ffffff;
+      }
+
+      .log-output {
+        flex: 1;
+        margin: 0;
+        padding: 14px;
+        overflow: auto;
+        color: #dbeafe;
+        background: #050914;
+        border: 1px solid #1e293b;
+        border-radius: var(--radius-sm);
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .log-entry {
+        display: grid;
+        gap: 2px;
+        padding: 8px 10px;
+        color: var(--ink-soft);
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 12px;
+      }
+
+      .log-entry time {
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      .status-panel svg {
+        flex: 0 0 auto;
+        margin-top: 2px;
+        color: var(--faint);
+      }
+
+      /* ---------- Board ---------- */
+      .board-wrap {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+        gap: 0;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        grid-auto-rows: 24px;
+        grid-auto-flow: dense;
+        flex: 1;
+        gap: 14px;
+        min-height: 0;
+        padding-bottom: 6px;
+        overflow: auto;
+        scroll-behavior: smooth;
+      }
+
+      .board.no-smooth {
+        scroll-behavior: auto;
+      }
+
+      .group {
+        display: flex;
+        flex-direction: column;
+        width: auto;
+        height: auto;
+        min-width: 0;
+        min-height: 250px;
+        max-width: 100%;
+        align-self: stretch;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        position: relative;
+        transition: box-shadow 180ms ease, border-color 180ms ease, transform 120ms ease;
+      }
+
+      .group-placeholder {
+        min-height: 250px;
+        background: rgba(79, 70, 229, 0.08);
+        border: 2px dashed var(--primary);
+        border-radius: var(--radius);
+      }
+
+      .group.is-empty {
+        min-height: 230px;
+      }
+
+      .group.drag-over {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16), var(--shadow-md);
+      }
+
+      .group.is-floating {
+        opacity: 0.96;
+        box-shadow: var(--shadow-lg);
+        pointer-events: none;
+      }
+
+      .group-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 12px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .group-grip {
+        display: grid;
+        flex: 0 0 auto;
+        width: 26px;
+        height: 34px;
+        place-items: center;
+        color: var(--line-strong);
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .group-grip:hover {
+        color: var(--muted);
+        background: var(--panel-soft);
+      }
+
+      .group-grip:active {
+        cursor: grabbing;
+      }
+
+      .group-title {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .group-name {
+        display: inline-block;
+        max-width: 100%;
+        margin: 0;
+        padding: 2px 6px;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--ink);
+        border-radius: 6px;
+        border: 1px solid transparent;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: text;
+      }
+
+      .group-name:hover {
+        background: var(--panel-soft);
+      }
+
+      .group-name:focus {
+        outline: none;
+        background: #ffffff;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+        cursor: text;
+      }
+
+      .group-meta {
+        display: block;
+        margin-top: 1px;
+        padding-left: 6px;
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .group-tools {
+        display: flex;
+        gap: 4px;
+      }
+
+      .group-tools button {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        color: var(--faint);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+      }
+
+      .group-tools button:hover {
+        color: var(--primary-strong);
+        background: var(--primary-tint);
+        border-color: #c7d2fe;
+      }
+
+      .group-resize-handle {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        z-index: 2;
+        width: 22px;
+        height: 22px;
+        cursor: nwse-resize;
+        touch-action: none;
+      }
+
+      .group-resize-handle::after {
+        content: "";
+        position: absolute;
+        right: 5px;
+        bottom: 5px;
+        width: 10px;
+        height: 10px;
+        border-right: 2px solid var(--line-strong);
+        border-bottom: 2px solid var(--line-strong);
+      }
+
+      .group-tools button.danger-hover:hover {
+        color: var(--danger);
+        background: var(--danger-tint);
+        border-color: #fecaca;
+      }
+
+      .broadcast {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 112px auto;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .broadcast input,
+      .broadcast select {
+        min-height: 40px;
+        color: var(--ink);
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        padding: 8px 12px;
+        font-family: var(--mono);
+        font-size: 13px;
+        transition: border-color 160ms ease, box-shadow 160ms ease;
+      }
+
+      .broadcast input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+      }
+
+      .broadcast select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+      }
+
+      .terminal-list {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        gap: 12px;
+        min-height: 0;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      .empty-state {
+        display: grid;
+        min-height: 150px;
+        place-items: center;
+        padding: 18px;
+        color: var(--faint);
+        background: rgba(248, 250, 252, 0.7);
+        border: 1px dashed var(--line-strong);
+        border-radius: var(--radius-sm);
+        text-align: center;
+      }
+
+      .empty-state strong {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .empty-state span {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+      }
+
+      /* ---------- Terminal card ---------- */
+      .terminal-card {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 auto;
+        overflow: hidden;
+        background: var(--terminal);
+        border: 1px solid var(--terminal-line);
+        border-radius: var(--radius-sm);
+        box-shadow: 0 10px 26px rgba(2, 6, 23, 0.2);
+        transition: box-shadow 180ms ease, border-color 180ms ease;
+      }
+
+      .terminal-card.dragging {
+        opacity: 0.55;
+        box-shadow: var(--shadow-lg);
+      }
+
+      .card-placeholder {
+        flex: 0 0 auto;
+        height: 120px;
+        border: 2px dashed var(--primary);
+        border-radius: var(--radius-sm);
+        background: rgba(79, 70, 229, 0.08);
+      }
+
+      .terminal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 48px;
+        padding: 9px 12px;
+        color: var(--terminal-ink);
+        background: var(--terminal-head);
+        border-bottom: 1px solid var(--terminal-line);
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+
+      .terminal-header:active {
+        cursor: grabbing;
+      }
+
+      .terminal-identity {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .status-dot {
+        flex: 0 0 auto;
+        width: 10px;
+        height: 10px;
+        background: #94a3b8;
+        border-radius: 999px;
+        transition: background 200ms ease, box-shadow 200ms ease;
+      }
+
+      .terminal-card.is-connecting .status-dot {
+        background: var(--warn);
+        box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.2);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+
+      .terminal-card.is-connected .status-dot {
+        background: #22c55e;
+        box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.24);
+      }
+
+      .terminal-card.is-error .status-dot {
+        background: #ef4444;
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.22);
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      .terminal-name {
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 1px 4px;
+        font-size: 13.5px;
+        font-weight: 700;
+        line-height: 1.2;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: text;
+      }
+
+      .terminal-name:hover {
+        background: #172033;
+      }
+
+      .terminal-name:focus {
+        outline: none;
+        color: #ffffff;
+        background: #111827;
+        border-color: #475569;
+      }
+
+      .terminal-meta {
+        overflow: hidden;
+        color: #94a3b8;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .terminal-network[data-latency="good"] {
+        color: #86efac;
+      }
+
+      .terminal-network[data-latency="fair"],
+      .terminal-network[data-latency="connecting"] {
+        color: #fde68a;
+      }
+
+      .terminal-network[data-latency="poor"],
+      .terminal-network[data-latency="offline"] {
+        color: #fca5a5;
+      }
+
+      .terminal-tools {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 5px;
+      }
+
+      .terminal-tools button {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        color: #cbd5e1;
+        background: #0f172a;
+        border: 1px solid #263244;
+        border-radius: 8px;
+        transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+      }
+
+      .terminal-tools button:hover {
+        color: #ffffff;
+        background: #1e293b;
+        border-color: #475569;
+      }
+
+      .terminal-tools button.close-btn:hover {
+        color: #ffffff;
+        background: var(--danger);
+        border-color: var(--danger);
+      }
+
+      .terminal-body {
+        position: relative;
+        height: 300px;
+        padding: 8px 10px;
+        overflow: auto;
+      }
+
+      .terminal-body .terminal,
+      .terminal-body .xterm {
+        height: 100%;
+      }
+
+      .terminal-placeholder {
+        display: flex;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        background: #070b16;
+        border: 1px dashed #263244;
+        border-radius: 8px;
+        font-family: var(--mono);
+        font-size: 13px;
+        white-space: pre-wrap;
+        text-align: left;
+      }
+
+      .resize-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 12px;
+        color: #334155;
+        background: var(--terminal-head);
+        border-top: 1px solid var(--terminal-line);
+        cursor: ns-resize;
+        touch-action: none;
+      }
+
+      .resize-handle::after {
+        content: "";
+        width: 36px;
+        height: 3px;
+        background: #334155;
+        border-radius: 999px;
+      }
+
+      /* ---------- Maximized card ---------- */
+      .terminal-card.maximized {
+        position: fixed;
+        inset: 14px;
+        z-index: 50;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .terminal-card.maximized .terminal-body {
+        flex: 1;
+        height: auto;
+      }
+
+      .terminal-card.maximized .resize-handle {
+        display: none;
+      }
+
+      .terminal-header .terminal-name .badge {
+        display: none;
+      }
+
+      .app-shell.group-fullscreen {
+        padding: 8px;
+      }
+
+      .app-shell.group-fullscreen .topbar,
+      .app-shell.group-fullscreen .sidebar {
+        display: none;
+      }
+
+      .app-shell.group-fullscreen .body,
+      .app-shell.group-fullscreen .board-wrap {
+        min-height: 0;
+        height: 100%;
+      }
+
+      .app-shell.group-fullscreen .board {
+        display: flex;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      .app-shell.group-fullscreen .group {
+        display: none;
+      }
+
+      .app-shell.group-fullscreen .group.is-focused {
+        display: flex;
+        flex: 1 1 100%;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .app-shell.group-fullscreen .group.is-focused .terminal-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+        align-content: start;
+        overflow: auto;
+      }
+
+      .app-shell.group-fullscreen .group.is-focused .terminal-card {
+        min-height: 360px;
+      }
+
+      .app-shell.group-fullscreen .group.is-focused .terminal-body {
+        height: min(52vh, 460px) !important;
+      }
+
+      .backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 49;
+        background: rgba(2, 6, 23, 0.5);
+        backdrop-filter: blur(2px);
+      }
+
+      /* ---------- Toast ---------- */
+      .toast-stack {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+
+      .toast {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 90vw;
+        padding: 10px 16px;
+        color: #ffffff;
+        background: #0f172a;
+        border-radius: 999px;
+        box-shadow: var(--shadow-md);
+        font-size: 13.5px;
+        animation: toast-in 200ms ease;
+      }
+
+      .toast.success { background: var(--accent-strong); }
+      .toast.error { background: var(--danger); }
+
+      @keyframes toast-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .hide {
+        display: none !important;
+      }
+
+      /* ---------- Responsive ---------- */
+      @media (max-width: 900px) {
+        .body {
+          flex-direction: column;
+        }
+
+        .sidebar {
+          flex: 0 0 auto;
+          width: 100%;
+        }
+
+        .app-shell.sidebar-collapsed .sidebar {
+          margin-left: 0;
+          margin-top: -14px;
+        }
+
+        .group {
+          width: auto;
+        }
+
+        .broadcast {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .app-shell.group-fullscreen .group.is-focused .terminal-list {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <div id="waiter" style="display: none"> Connecting ... </div>
+    <a class="skip-link" href="#board" data-i18n="skipTerminals">跳到终端列表</a>
+    <div class="app-shell" id="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <button class="btn btn-icon" type="button" id="toggle-sidebar" aria-label="切换连接面板" title="切换连接面板" data-i18n-title="togglePanel" data-i18n-aria-label="togglePanel">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="m5 8 4 4-4 4M13 16h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h1 data-i18n="appTitle">TermFleet-SSH</h1>
+            <p><span class="live-dot" aria-hidden="true"></span><span id="fleet-summary">已连接 0 个 · 0 个分组</span></p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="btn btn-lang" type="button" id="language-toggle" aria-label="切换语言" title="切换语言" data-i18n-title="toggleLanguage" data-i18n-aria-label="toggleLanguage">EN</button>
+          <button class="btn btn-compact" type="button" id="open-log" data-i18n="operationLog" data-i18n-title="operationLog" data-i18n-aria-label="operationLog">日志</button>
+          <button class="btn" type="button" id="open-local-terminal">
+            <span data-i18n="localTerminal">本机终端</span>
+          </button>
+          <button class="btn" type="button" id="add-group">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span data-i18n="newGroup">新建分组</span>
+          </button>
+          <button class="btn btn-danger" type="button" id="disconnect-all">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span data-i18n="disconnectAll">全部断开</span>
+          </button>
+        </div>
+      </header>
 
-    <div class="container form-container" style="display: none">
-      <form id="connect" action="" method="post" enctype="multipart/form-data"{% if debug %} novalidate{% end %}>
-        <div class="row">
-          <div class="col">
-            <label for="Hostname">Hostname</label>
-            <input class="form-control" type="text" id="hostname" name="hostname" value="" required>
+      <div class="body">
+        <aside class="sidebar" aria-labelledby="connect-title">
+          <div class="sidebar-head">
+            <div>
+              <h2 id="connect-title" data-i18n="connectServer">连接服务器</h2>
+              <p data-i18n="openSession">打开新的 SSH 会话</p>
+            </div>
           </div>
-          <div class="col">
-            <label for="Port">Port</label>
-            <input class="form-control" type="number" id="port" name="port" placeholder="22" value="" min=1 max=65535>
+          <div class="sidebar-scroll">
+            <form id="connect" class="connect-form" action="" method="post" enctype="multipart/form-data"{% if debug %} novalidate{% end %}>
+              <div class="field">
+                <label for="hostname" data-i18n="hostname">主机名</label>
+                <input type="text" id="hostname" name="hostname" autocomplete="off" placeholder="10.0.0.12 或 host.internal" data-i18n-placeholder="hostnamePlaceholder" required>
+              </div>
+              <div class="split">
+                <div class="field">
+                  <label for="username" data-i18n="username">用户名</label>
+                  <input type="text" id="username" name="username" autocomplete="username" required>
+                </div>
+                <div class="field">
+                  <label for="port" data-i18n="port">端口</label>
+                  <input type="number" inputmode="numeric" id="port" name="port" placeholder="22" min="1" max="65535">
+                </div>
+              </div>
+              <div class="field">
+                <label for="password" data-i18n="password">密码</label>
+                <input type="password" id="password" name="password" autocomplete="current-password">
+              </div>
+              <div class="field">
+                <label for="privatekey" data-i18n="privateKey">私钥</label>
+                <div class="file-picker">
+                  <label class="btn btn-sm" for="privatekey" data-i18n="chooseFile">选择文件</label>
+                  <span class="file-name" id="privatekey-name" data-i18n="noFileChosen">未选择文件</span>
+                  <input type="file" id="privatekey" name="privatekey">
+                </div>
+              </div>
+              <div class="split">
+                <div class="field">
+                  <label for="passphrase" data-i18n="passphrase">私钥口令</label>
+                  <input type="password" id="passphrase" name="passphrase">
+                </div>
+                <div class="field">
+                  <label for="totp">TOTP</label>
+                  <input type="password" inputmode="numeric" id="totp" name="totp">
+                </div>
+              </div>
+              <div class="field">
+                <label for="target-group" data-i18n="addToGroup">加入分组</label>
+                <select id="target-group" name="target_group"></select>
+              </div>
+              <input type="hidden" id="term" name="term" value="xterm-256color">
+              <input type="hidden" id="ssh-config-host" name="ssh_config_host" value="">
+              {% module xsrf_form_html() %}
+              <button type="submit" class="btn btn-primary" id="connect-button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span data-i18n="connect">连接</span>
+              </button>
+            </form>
+            <section class="ssh-config-panel" aria-labelledby="ssh-config-title">
+              <div class="ssh-config-head">
+                <h3 id="ssh-config-title" data-i18n="recognizedHosts">已识别主机</h3>
+                <div class="top-actions">
+                  <button class="btn btn-sm" type="button" id="open-all-ssh-config" data-i18n="openAllHosts">打开全部</button>
+                  <button class="btn btn-sm" type="button" id="toggle-ssh-config" data-i18n="collapseHosts">收起</button>
+                  <button class="btn btn-sm" type="button" id="refresh-ssh-config" data-i18n="refreshHosts">刷新</button>
+                </div>
+              </div>
+              <div class="ssh-config-list" id="ssh-config-list"></div>
+            </section>
+            <section class="system-panel" aria-labelledby="system-settings-title">
+              <div class="panel-title-row">
+                <h3 id="system-settings-title" data-i18n="systemSettings">系统设置</h3>
+              </div>
+              <label class="setting-row" for="setting-confirm-disconnect">
+                <span data-i18n="confirmDisconnect">断开全部前确认</span>
+                <input type="checkbox" id="setting-confirm-disconnect" checked>
+              </label>
+              <label class="setting-row" for="setting-broadcast-enter">
+                <span data-i18n="broadcastEnter">广播命令自动回车</span>
+                <input type="checkbox" id="setting-broadcast-enter" checked>
+              </label>
+              <label class="setting-row" for="setting-font-size">
+                <span data-i18n="terminalFontSize">终端字号</span>
+                <input type="number" id="setting-font-size" min="10" max="24" value="13">
+              </label>
+              <label class="setting-row" for="setting-terminal-height">
+                <span data-i18n="terminalHeight">终端默认高度</span>
+                <input type="number" id="setting-terminal-height" min="180" max="720" value="300">
+              </label>
+              <label class="setting-row" for="setting-max-terminals">
+                <span data-i18n="maxTerminals">最多终端数</span>
+                <input type="number" id="setting-max-terminals" min="1" max="500" value="20">
+              </label>
+            </section>
+            <section class="log-panel" aria-labelledby="operation-log-title">
+              <div class="panel-title-row">
+                <h3 id="operation-log-title" data-i18n="operationLog">操作日志</h3>
+                <button class="btn btn-sm" type="button" id="clear-log" data-i18n="clearLog">清空</button>
+              </div>
+              <div class="log-list" id="operation-log"></div>
+            </section>
+            <div id="status" class="status-panel" role="status" aria-live="polite">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 8v5M12 16h.01M12 3l9 16H3l9-16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span id="status-text">就绪。填写表单后即可连接。</span>
+            </div>
           </div>
+        </aside>
+
+        <div class="board-wrap">
+          <section class="board" id="board" aria-label="服务器分组" data-i18n-aria-label="serverGroups"></section>
         </div>
-        <div class="row">
-          <div class="col">
-            <label for="Username">Username</label>
-            <input class="form-control" type="text" id="username" name="username" value="" required>
-          </div>
-          <div class="col">
-            <label for="Password">Password</label>
-            <input class="form-control" type="password" id="password" name="password" value="">
-          </div>
-        </div>
-        <div class="row">
-          <div class="col">
-            <label for="Username">Private Key</label>
-            <input class="form-control" type="file" id="privatekey" name="privatekey" value="">
-          </div>
-          <div class="col">
-            <label for="Passphrase">Passphrase</label>
-            <input class="form-control" type="password" id="passphrase" name="passphrase" value="">
-          </div>
-        </div>
-        <div class="row">
-          <div class="col">
-            <label for="totp">Totp (time-based one-time password)</label>
-            <input class="form-control" type="password" id="totp" name="totp" value="">
-          </div>
-          <div class="col">
-          </div>
-        </div>
-        <input type="hidden" id="term" name="term" value="xterm-256color">
-        {% module xsrf_form_html() %}
-        <button type="submit" class="btn btn-primary">Connect</button>
-        <button type="reset" class="btn btn-danger">Reset</button>
-      </form>
+      </div>
     </div>
 
-    <div class="container">
-      <div id="status" style="color: red; white-space: pre-line;"></div>
-      <div id="terminal"></div>
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+    <div class="log-overlay" id="log-overlay" aria-labelledby="log-overlay-title" aria-modal="true" role="dialog">
+      <div class="log-overlay-head">
+        <h2 id="log-overlay-title" data-i18n="operationLog">操作日志</h2>
+        <div class="top-actions">
+          <button class="btn btn-sm" type="button" id="clear-log-full" data-i18n="clearLog">清空</button>
+          <button class="btn btn-sm" type="button" id="close-log" data-i18n="close">关闭</button>
+        </div>
+      </div>
+      <pre class="log-output" id="log-output"></pre>
     </div>
 
-    <script src="static/js/jquery.min.js"></script>
-    <script src="static/js/popper.min.js"></script>
-    <script src="static/js/bootstrap.min.js"></script>
     <script src="static/js/xterm.min.js"></script>
     <script src="static/js/xterm-addon-fit.min.js"></script>
     <script src="static/js/main.js"></script>

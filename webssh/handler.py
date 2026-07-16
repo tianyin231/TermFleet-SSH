@@ -1,8 +1,12 @@
 import io
+import getpass
 import json
 import logging
+import os
+import pty
 import socket
 import struct
+import subprocess
 import traceback
 import weakref
 import paramiko
@@ -17,7 +21,9 @@ from webssh.utils import (
     to_int, to_ip_address, UnicodeType, is_ip_hostname, is_same_primary_domain,
     is_valid_encoding
 )
-from webssh.worker import Worker, recycle_worker, clients
+from webssh.worker import (
+    Worker, PTYChannel, LocalProcess, recycle_worker, clients
+)
 
 try:
     from json.decoder import JSONDecodeError
@@ -31,6 +37,7 @@ except ImportError:
 
 
 DEFAULT_PORT = 22
+HOST_PATTERN_CHARS = set('*?!')
 
 swallow_http_errors = True
 redirecting = None
@@ -38,6 +45,55 @@ redirecting = None
 
 class InvalidValueError(Exception):
     pass
+
+
+def get_ssh_config_path():
+    return os.path.expanduser(getattr(options, 'sshconfig', '~/.ssh/config'))
+
+
+def host_is_explicit(host):
+    return host and not any(ch in host for ch in HOST_PATTERN_CHARS)
+
+
+def get_default_ssh_user():
+    return getpass.getuser()
+
+
+def get_ssh_config():
+    filename = get_ssh_config_path()
+    config = paramiko.SSHConfig()
+    if not os.path.isfile(filename):
+        return config
+
+    with open(filename) as f:
+        config.parse(f)
+    return config
+
+
+def parse_ssh_config_hosts():
+    config = get_ssh_config()
+    hosts = []
+
+    for host in sorted(config.get_hostnames()):
+        if not host_is_explicit(host):
+            continue
+        data = config.lookup(host)
+        hostname = data.get('hostname') or host
+        port = to_int(data.get('port')) or DEFAULT_PORT
+        if not (is_valid_hostname(hostname) or is_valid_ip_address(hostname)):
+            continue
+        if not is_valid_port(port):
+            continue
+        identityfiles = data.get('identityfile') or []
+        hosts.append({
+            'alias': host,
+            'hostname': hostname,
+            'username': data.get('user') or get_default_ssh_user(),
+            'port': port,
+            'has_identity_file': bool(identityfiles)
+        })
+
+    return hosts
 
 
 class SSHClient(paramiko.SSHClient):
@@ -312,6 +368,68 @@ class NotFoundHandler(MixinHandler, tornado.web.ErrorHandler):
         raise tornado.web.HTTPError(404)
 
 
+class SSHConfigHandler(MixinHandler, tornado.web.RequestHandler):
+
+    def get(self):
+        self.write({
+            'path': get_ssh_config_path(),
+            'hosts': parse_ssh_config_hosts()
+        })
+
+
+class SystemSettingsHandler(MixinHandler, tornado.web.RequestHandler):
+
+    def get(self):
+        self.write({'maxconn': options.maxconn})
+
+    def post(self):
+        value = to_int(self.get_argument('maxconn', ''))
+        if value is None or value < 1 or value > 500:
+            raise tornado.web.HTTPError(400, 'Invalid maxconn')
+        options.maxconn = value
+        self.write({'maxconn': options.maxconn})
+
+
+class ActiveWorkersHandler(MixinHandler, tornado.web.RequestHandler):
+
+    def get(self):
+        ip, _ = self.get_client_addr()
+        workers = clients.get(ip, {})
+        self.write({'ids': [key for key, worker in workers.items() if worker]})
+
+
+class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
+
+    def initialize(self, loop):
+        super(LocalTerminalHandler, self).initialize(loop)
+        self.result = dict(id=None, status=None, encoding='utf-8')
+
+    def post(self):
+        ip, port = self.get_client_addr()
+        workers = clients.get(ip, {})
+        if workers and len(workers) >= options.maxconn:
+            raise tornado.web.HTTPError(403, 'Too many live connections.')
+
+        master, slave = pty.openpty()
+        shell = os.environ.get('SHELL') or '/bin/sh'
+        env = os.environ.copy()
+        env.setdefault('TERM', self.get_argument('term', u'') or u'xterm-256color')
+        proc = subprocess.Popen(
+            [shell], stdin=slave, stdout=slave, stderr=slave,
+            close_fds=True, env=env, preexec_fn=os.setsid
+        )
+        os.close(slave)
+        worker = Worker(self.loop, LocalProcess(proc), PTYChannel(master), ('localhost', 0))
+        worker.encoding = 'utf-8'
+        if not workers:
+            clients[ip] = workers
+        worker.src_addr = (ip, port)
+        workers[worker.id] = worker
+        self.loop.call_later(options.delay, recycle_worker, worker)
+        self.result.update(id=worker.id)
+        self.write(self.result)
+
+
 class IndexHandler(MixinHandler, tornado.web.RequestHandler):
 
     executor = ThreadPoolExecutor(max_workers=cpu_count()*5)
@@ -377,6 +495,33 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             raise InvalidValueError('Invalid port: {}'.format(value))
         return port
 
+    def parse_port_value(self, value):
+        if not value:
+            return DEFAULT_PORT
+
+        port = to_int(value)
+        if port is None or not is_valid_port(port):
+            raise InvalidValueError('Invalid port: {}'.format(value))
+        return port
+
+    def get_ssh_config_data(self, alias):
+        if not host_is_explicit(alias):
+            raise InvalidValueError('Invalid SSH config host: {}'.format(alias))
+
+        config = get_ssh_config()
+        if alias not in config.get_hostnames():
+            raise InvalidValueError('Unknown SSH config host: {}'.format(alias))
+
+        return config.lookup(alias)
+
+    def get_identityfile_privatekey(self, identityfiles):
+        for filename in identityfiles or []:
+            filename = os.path.expanduser(os.path.expandvars(filename))
+            if os.path.isfile(filename):
+                with open(filename) as f:
+                    return f.read(), filename
+        return '', ''
+
     def lookup_hostname(self, hostname, port):
         key = hostname if port == 22 else '[{}]:{}'.format(hostname, port)
 
@@ -388,13 +533,36 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
                     )
 
     def get_args(self):
-        hostname = self.get_hostname()
-        port = self.get_port()
-        username = self.get_value('username')
+        ssh_config_host = self.get_argument('ssh_config_host', u'')
+        if ssh_config_host:
+            config = self.get_ssh_config_data(ssh_config_host)
+            hostname = self.get_argument('hostname', u'') or \
+                config.get('hostname') or ssh_config_host
+            username = self.get_argument('username', u'') or \
+                config.get('user') or get_default_ssh_user()
+            port = self.parse_port_value(
+                self.get_argument('port', u'') or config.get('port', u'')
+            )
+        else:
+            config = {}
+            hostname = self.get_hostname()
+            username = self.get_value('username')
+            port = self.get_port()
+
+        if not username:
+            raise InvalidValueError('Missing value username')
+        if not (is_valid_hostname(hostname) or is_valid_ip_address(hostname)):
+            raise InvalidValueError('Invalid hostname: {}'.format(hostname))
+
         password = self.get_argument('password', u'')
         privatekey, filename = self.get_privatekey()
         passphrase = self.get_argument('passphrase', u'')
         totp = self.get_argument('totp', u'')
+
+        if not privatekey:
+            privatekey, filename = self.get_identityfile_privatekey(
+                config.get('identityfile')
+            )
 
         if isinstance(self.policy, paramiko.RejectPolicy):
             self.lookup_hostname(hostname, port)
@@ -548,8 +716,8 @@ class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
         else:
             worker = workers.get(worker_id)
             if worker:
-                workers[worker_id] = None
                 self.set_nodelay(True)
+                worker.detach_handler()
                 worker.set_handler(self)
                 self.worker_ref = weakref.ref(worker)
                 self.loop.add_handler(worker.fd, worker, IOLoop.READ)
@@ -581,6 +749,11 @@ class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
         if not isinstance(msg, dict):
             return
 
+        ping = msg.get('ping')
+        if ping is not None:
+            self.write_message(json.dumps({'pong': ping}))
+            return
+
         resize = msg.get('resize')
         if resize and len(resize) == 2:
             try:
@@ -600,4 +773,14 @@ class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
 
         worker = self.worker_ref() if self.worker_ref else None
         if worker:
-            worker.close(reason=self.close_reason)
+            manual_reasons = {
+                'closed', 'closed by user', 'user closed', '用户关闭',
+                '已关闭'
+            }
+            if worker.handler is not self:
+                return
+            if self.close_reason in manual_reasons:
+                worker.close(reason=self.close_reason)
+            else:
+                worker.detach_handler(self)
+                self.loop.call_later(max(options.delay, 30), recycle_worker, worker)
