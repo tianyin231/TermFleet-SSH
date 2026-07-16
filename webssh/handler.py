@@ -546,8 +546,8 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         else:
             config = {}
             hostname = self.get_hostname()
-            username = self.get_value('username')
             port = self.get_port()
+            username = self.get_value('username')
 
         if not username:
             raise InvalidValueError('Missing value username')
