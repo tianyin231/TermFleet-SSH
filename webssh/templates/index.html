@@ -432,6 +432,7 @@
         border-top: 1px solid var(--line);
       }
 
+      .ssh-config-panel.is-collapsed .ssh-config-bulk,
       .ssh-config-panel.is-collapsed .ssh-config-list {
         display: none;
       }
@@ -453,6 +454,42 @@
         gap: 8px;
       }
 
+      .ssh-config-bulk {
+        display: flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 7px 8px;
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+      }
+
+      .ssh-select-all,
+      .ssh-host-select {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+        cursor: pointer;
+      }
+
+      .ssh-select-all {
+        min-height: 32px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .ssh-config-panel input[type="checkbox"] {
+        width: 17px;
+        height: 17px;
+        flex: 0 0 auto;
+        margin: 0;
+        accent-color: var(--primary);
+      }
+
       .ssh-host {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto auto;
@@ -462,6 +499,30 @@
         background: var(--panel-soft);
         border: 1px solid var(--line);
         border-radius: var(--radius-sm);
+        cursor: pointer;
+      }
+
+      .ssh-host.is-selected {
+        background: #eff6ff;
+        border-color: #93c5fd;
+      }
+
+      .ssh-host-copy {
+        min-width: 0;
+      }
+
+      .ssh-host-check {
+        display: grid;
+        width: 32px;
+        height: 32px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .ssh-host-check:focus-within {
+        box-shadow: 0 0 0 3px var(--ring);
       }
 
       .ssh-host-name {
@@ -1029,12 +1090,36 @@
         position: relative;
         height: 300px;
         padding: 8px 10px;
-        overflow: auto;
+        overflow: hidden;
       }
 
       .terminal-body .terminal,
       .terminal-body .xterm {
         height: 100%;
+      }
+
+      .terminal-body .xterm-viewport {
+        overflow-x: hidden;
+        scrollbar-color: #475569 transparent;
+        scrollbar-width: thin;
+      }
+
+      .terminal-body .xterm-viewport::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .terminal-body .xterm-viewport::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .terminal-body .xterm-viewport::-webkit-scrollbar-thumb {
+        background: #475569;
+        border: 2px solid #0a0f1f;
+        border-radius: 8px;
+      }
+
+      .terminal-body .xterm-viewport::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
       }
 
       .terminal-placeholder {
@@ -1199,6 +1284,25 @@
           width: 100%;
         }
 
+        .ssh-config-head {
+          align-items: flex-start;
+        }
+
+        .ssh-config-head .top-actions {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .ssh-config-panel .btn-sm,
+        .ssh-select-all,
+        .ssh-host-check {
+          min-height: 44px;
+        }
+
+        .ssh-host-check {
+          width: 44px;
+        }
+
         .app-shell.sidebar-collapsed .sidebar {
           margin-left: 0;
           margin-top: -14px;
@@ -1334,12 +1438,20 @@
               <div class="ssh-config-head">
                 <h3 id="ssh-config-title" data-i18n="recognizedHosts">已识别主机</h3>
                 <div class="top-actions">
-                  <button class="btn btn-sm" type="button" id="open-all-ssh-config" data-i18n="openAllHosts">打开全部</button>
                   <button class="btn btn-sm" type="button" id="toggle-ssh-config" data-i18n="collapseHosts">收起</button>
                   <button class="btn btn-sm" type="button" id="refresh-ssh-config" data-i18n="refreshHosts">刷新</button>
                 </div>
               </div>
-              <div class="ssh-config-list" id="ssh-config-list"></div>
+              <div class="ssh-config-bulk">
+                <label class="ssh-select-all" for="select-all-ssh-config">
+                  <input type="checkbox" id="select-all-ssh-config">
+                  <span data-i18n="selectAllHosts">全选</span>
+                </label>
+                <button class="btn btn-primary btn-sm" type="button" id="open-selected-ssh-config" disabled>
+                  <span id="open-selected-ssh-config-label">打开所选（0）</span>
+                </button>
+              </div>
+              <div class="ssh-config-list" id="ssh-config-list" aria-live="polite"></div>
             </section>
             <section class="system-panel" aria-labelledby="system-settings-title">
               <div class="panel-title-row">

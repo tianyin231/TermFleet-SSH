@@ -147,10 +147,11 @@
       localTerminal: '本机终端',
       chooseFile: '选择文件',
       noFileChosen: '未选择文件',
-      openAllHosts: '打开全部',
-      chooseTargetGroup: '输入目标分组序号：\n{groups}',
-      invalidGroupChoice: '分组选择无效。',
-      openingAllHosts: '正在打开 {count} 台主机到 {name}。',
+      selectAllHosts: '全选',
+      selectHost: '选择 {name}',
+      openSelectedHosts: '打开所选（{count}）',
+      noHostsSelected: '请先选择要打开的主机。',
+      openingSelectedHosts: '正在打开所选 {count} 台主机到 {name}。',
       collapseHosts: '收起',
       expandHosts: '展开',
       maxTerminals: '最多终端数',
@@ -276,10 +277,11 @@
       localTerminal: 'Local terminal',
       chooseFile: 'Choose file',
       noFileChosen: 'No file chosen',
-      openAllHosts: 'Open all',
-      chooseTargetGroup: 'Enter target group number:\n{groups}',
-      invalidGroupChoice: 'Invalid group selection.',
-      openingAllHosts: 'Opening {count} hosts in {name}.',
+      selectAllHosts: 'Select all',
+      selectHost: 'Select {name}',
+      openSelectedHosts: 'Open selected ({count})',
+      noHostsSelected: 'Select at least one host to open.',
+      openingSelectedHosts: 'Opening {count} selected hosts in {name}.',
       collapseHosts: 'Collapse',
       expandHosts: 'Expand',
       maxTerminals: 'Max terminals',
@@ -315,6 +317,8 @@
   var operationLogs = loadLogs();
   var settings = loadSettings();
   var sshConfigCollapsed = false;
+  var selectedSshConfigHosts = Object.create(null);
+  var sshConfigSelectionAnchor = null;
   var groupLayoutObserver = null;
 
   // ---- DOM ---------------------------------------------------------------
@@ -331,7 +335,9 @@
   var sshConfigHostInput = $('#ssh-config-host');
   var sshConfigList = $('#ssh-config-list');
   var refreshSshConfig = $('#refresh-ssh-config');
-  var openAllSshConfig = $('#open-all-ssh-config');
+  var selectAllSshConfig = $('#select-all-ssh-config');
+  var openSelectedSshConfig = $('#open-selected-ssh-config');
+  var openSelectedSshConfigLabel = $('#open-selected-ssh-config-label');
   var sshConfigHosts = [];
   var confirmDisconnectInput = $('#setting-confirm-disconnect');
   var broadcastEnterInput = $('#setting-broadcast-enter');
@@ -837,62 +843,155 @@
     return data;
   }
 
-  function chooseGroupForOpeningAll() {
-    if (!groups.length) { addGroup(null); }
-    var lines = groups.map(function (group, index) {
-      return (index + 1) + '. ' + group.name;
-    }).join('\n');
-    var value = window.prompt(t('chooseTargetGroup', { groups: lines }), '1');
-    if (value === null) { return null; }
-    var index = Number(value) - 1;
-    if (index < 0 || index >= groups.length || Math.floor(index) !== index) {
-      toast(t('invalidGroupChoice'), 'error');
-      return null;
-    }
-    return groups[index];
+  function selectedSshConfigHostList() {
+    return sshConfigHosts.filter(function (host) {
+      return !!selectedSshConfigHosts[host.alias];
+    });
   }
 
-  function openAllSshConfigHosts() {
-    if (!sshConfigHosts.length) {
-      toast(t('noHosts'), 'error');
+  function sshConfigHostIndex(alias) {
+    for (var i = 0; i < sshConfigHosts.length; i += 1) {
+      if (sshConfigHosts[i].alias === alias) { return i; }
+    }
+    return -1;
+  }
+
+  function refreshSshConfigSelectionState() {
+    Array.prototype.forEach.call(sshConfigList.querySelectorAll('.ssh-host'), function (row) {
+      var selected = !!selectedSshConfigHosts[row.dataset.hostAlias];
+      var checkbox = row.querySelector('input[type="checkbox"]');
+      row.classList.toggle('is-selected', selected);
+      if (checkbox) { checkbox.checked = selected; }
+    });
+    updateSshConfigSelectionControls(false);
+  }
+
+  function updateSshConfigHostSelection(alias, event, requestedState) {
+    var index = sshConfigHostIndex(alias);
+    var anchorIndex = sshConfigHostIndex(sshConfigSelectionAnchor);
+    var additive = !!(event && (event.ctrlKey || event.metaKey));
+    var range = !!(event && event.shiftKey && anchorIndex >= 0 && index >= 0);
+
+    if (range) {
+      if (requestedState === undefined && !additive) {
+        selectedSshConfigHosts = Object.create(null);
+      }
+      var selectRange = requestedState === undefined ? true : requestedState;
+      var start = Math.min(anchorIndex, index);
+      var end = Math.max(anchorIndex, index);
+      for (var i = start; i <= end; i += 1) {
+        var rangeAlias = sshConfigHosts[i].alias;
+        if (selectRange) {
+          selectedSshConfigHosts[rangeAlias] = true;
+        } else {
+          delete selectedSshConfigHosts[rangeAlias];
+        }
+      }
+    } else if (requestedState !== undefined) {
+      if (requestedState) {
+        selectedSshConfigHosts[alias] = true;
+      } else {
+        delete selectedSshConfigHosts[alias];
+      }
+    } else if (additive) {
+      if (selectedSshConfigHosts[alias]) {
+        delete selectedSshConfigHosts[alias];
+      } else {
+        selectedSshConfigHosts[alias] = true;
+      }
+    } else {
+      selectedSshConfigHosts = Object.create(null);
+      selectedSshConfigHosts[alias] = true;
+    }
+
+    sshConfigSelectionAnchor = alias;
+    refreshSshConfigSelectionState();
+  }
+
+  function updateSshConfigSelectionControls(disabled) {
+    var selectedCount = selectedSshConfigHostList().length;
+    var hasHosts = sshConfigHosts.length > 0;
+    selectAllSshConfig.checked = hasHosts && selectedCount === sshConfigHosts.length;
+    selectAllSshConfig.indeterminate = selectedCount > 0 && selectedCount < sshConfigHosts.length;
+    selectAllSshConfig.disabled = !!disabled || !hasHosts;
+    openSelectedSshConfig.disabled = !!disabled || selectedCount === 0;
+    openSelectedSshConfigLabel.textContent = t('openSelectedHosts', { count: selectedCount });
+  }
+
+  function openSelectedSshConfigHosts() {
+    var selectedHosts = selectedSshConfigHostList();
+    if (!selectedHosts.length) {
+      toast(t('noHostsSelected'), 'error');
       return;
     }
-    var group = chooseGroupForOpeningAll();
-    if (!group) { return; }
-    sshConfigHosts.forEach(function (host) {
+    var group = groupById(groupSelect.value) || groups[0];
+    if (!group) { group = addGroup(null); }
+    selectedHosts.forEach(function (host) {
       connectTerminal(sshConfigHostFormData(host, group.id));
     });
-    setStatus(t('openingAllHosts', { count: sshConfigHosts.length, name: group.name }));
-    toast(t('openingAllHosts', { count: sshConfigHosts.length, name: group.name }));
+    selectedSshConfigHosts = Object.create(null);
+    sshConfigSelectionAnchor = null;
+    refreshSshConfigSelectionState();
+    setStatus(t('openingSelectedHosts', { count: selectedHosts.length, name: group.name }));
+    toast(t('openingSelectedHosts', { count: selectedHosts.length, name: group.name }));
   }
 
   function renderSshConfigHosts(message) {
     sshConfigList.innerHTML = '';
     if (message) {
       sshConfigList.appendChild(el('div', { class: 'ssh-config-empty', text: message }));
+      updateSshConfigSelectionControls(true);
       return;
     }
     if (!sshConfigHosts.length) {
       sshConfigList.appendChild(el('div', { class: 'ssh-config-empty', text: t('noHosts') }));
+      updateSshConfigSelectionControls(false);
       return;
     }
 
     sshConfigHosts.forEach(function (host) {
       var meta = (host.username ? host.username + '@' : '') +
         (host.hostname || host.alias) + ':' + host.port + ' · ' + hostAuthLabel(host);
+      var selected = !!selectedSshConfigHosts[host.alias];
+      var checkbox = el('input', {
+        type: 'checkbox',
+        'aria-label': t('selectHost', { name: host.alias })
+      });
+      checkbox.checked = selected;
       var fillBtn = el('button', { class: 'btn btn-sm', type: 'button', text: t('fillHost') });
       var openBtn = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: t('openHost') });
+      var checkLabel = el('label', { class: 'ssh-host-check' }, [checkbox]);
+      var row = el('div', {
+        class: 'ssh-host' + (selected ? ' is-selected' : ''),
+        dataset: { hostAlias: host.alias }
+      });
+      checkbox.addEventListener('click', function (event) {
+        updateSshConfigHostSelection(host.alias, event, checkbox.checked);
+      });
+      checkLabel.addEventListener('click', function (event) {
+        if (event.target === checkbox) { return; }
+        event.preventDefault();
+        event.stopPropagation();
+        updateSshConfigHostSelection(host.alias, event, !selectedSshConfigHosts[host.alias]);
+      });
       fillBtn.addEventListener('click', function () { fillFromSshConfigHost(host); });
       openBtn.addEventListener('click', function () { openSshConfigHost(host); });
-      sshConfigList.appendChild(el('div', { class: 'ssh-host' }, [
-        el('div', {}, [
+      row.addEventListener('click', function (event) {
+        if (event.target.closest('button') || event.target.closest('.ssh-host-check')) { return; }
+        updateSshConfigHostSelection(host.alias, event);
+      });
+      row.appendChild(el('div', { class: 'ssh-host-select' }, [
+        checkLabel,
+        el('div', { class: 'ssh-host-copy' }, [
           el('div', { class: 'ssh-host-name', text: host.alias }),
           el('div', { class: 'ssh-host-meta', text: meta })
-        ]),
-        fillBtn,
-        openBtn
+        ])
       ]));
+      row.appendChild(fillBtn);
+      row.appendChild(openBtn);
+      sshConfigList.appendChild(row);
     });
+    updateSshConfigSelectionControls(false);
   }
 
   function updateSshConfigCollapse() {
@@ -910,6 +1009,12 @@
       })
       .then(function (data) {
         sshConfigHosts = data.hosts || [];
+        var available = Object.create(null);
+        sshConfigHosts.forEach(function (host) { available[host.alias] = true; });
+        Object.keys(selectedSshConfigHosts).forEach(function (alias) {
+          if (!available[alias]) { delete selectedSshConfigHosts[alias]; }
+        });
+        if (!available[sshConfigSelectionAnchor]) { sshConfigSelectionAnchor = null; }
         renderSshConfigHosts();
         if (sshConfigHosts.length) {
           setStatus(t('loadedHosts', { count: sshConfigHosts.length }));
@@ -2189,7 +2294,15 @@
   $('#add-group').addEventListener('click', function () { addGroup(null, { focus: true }); });
 
   refreshSshConfig.addEventListener('click', loadSshConfigHosts);
-  openAllSshConfig.addEventListener('click', openAllSshConfigHosts);
+  selectAllSshConfig.addEventListener('change', function () {
+    selectedSshConfigHosts = Object.create(null);
+    sshConfigSelectionAnchor = null;
+    if (selectAllSshConfig.checked) {
+      sshConfigHosts.forEach(function (host) { selectedSshConfigHosts[host.alias] = true; });
+    }
+    refreshSshConfigSelectionState();
+  });
+  openSelectedSshConfig.addEventListener('click', openSelectedSshConfigHosts);
   toggleSshConfigButton.addEventListener('click', function () {
     sshConfigCollapsed = !sshConfigCollapsed;
     updateSshConfigCollapse();

@@ -578,6 +578,8 @@ class TestAppInDebugMode(OtherTestBase):
     def test_html(self):
         response = self.fetch('/', method='GET')
         self.assertIn(b'novalidate>', response.body)
+        self.assertIn(b'id="select-all-ssh-config"', response.body)
+        self.assertIn(b'id="open-selected-ssh-config"', response.body)
 
 
 class TestAppWithLargeBuffer(OtherTestBase):

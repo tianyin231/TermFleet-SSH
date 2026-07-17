@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain TermFleet-SSH"
+  short_description: "Navigate and safely evolve the TermFleet-SSH codebase"
+  default_prompt: "Use $maintain-termfleet-ssh to plan and implement a repository change while preserving its session contracts."
