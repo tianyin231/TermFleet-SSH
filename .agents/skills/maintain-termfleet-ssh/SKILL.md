@@ -59,11 +59,13 @@ Supplement with `--domain ux` or `--domain web` for the affected interaction. Th
 ## Preserve Core Contracts
 
 - Preserve the two-stage session flow unless the task explicitly replaces it: create a worker over HTTP, then bind `/ws?id=<worker-id>`.
-- Preserve binary terminal output and JSON client input. JSON currently carries `data`, `resize`, and `ping`; the server replies to `ping` with JSON `pong`.
+- Preserve binary terminal output and JSON client input. JSON currently carries `data`, `resize`, `ping`, and OSC 7-derived `cwd`; the server replies to `ping` with JSON `pong`.
+- Preserve the upload boundary: `/upload` streams one raw file body to a temporary file, resolves the target Worker by client IP and worker ID, then writes through SFTP or the local process account. Bash, Zsh, and Fish sessions receive a non-persistent prompt hook that reports OSC 7 `cwd` updates; other shells fall back to the SSH home or local startup directory. Keep size limits, temporary-file cleanup, absolute-path checks, and explicit overwrite consent intact.
 - Preserve worker cleanup semantics. Manual close terminates the SSH/local process; incidental WebSocket loss detaches it temporarily so page restoration can rebind it.
 - Treat `clients` as sensitive shared state keyed by client IP. Changes to identity, proxies, multi-user behavior, or horizontal scaling require an explicit design decision.
 - Never persist or expose passwords, private-key bodies, passphrases, or TOTP values. Reconnect metadata intentionally excludes secrets.
 - Preserve XSRF, origin, trusted-downstream, TLS redirect, and host-key policy behavior unless the task explicitly changes the security model.
+- Put live, user-facing runtime limits such as `maxconn` and `maxupload` in the system-settings workflow. Keep listener, TLS, proxy-trust, origin, host-key, and other startup/security options CLI-only unless authenticated administration and restart semantics are explicitly designed.
 - Keep Chinese and English UI text in sync. Update accessible labels and dynamic text as well as visible labels.
 - When changing terminal or group state, check browser persistence, drag/resize behavior, fullscreen behavior, restore behavior, and cleanup.
 

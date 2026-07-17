@@ -1,7 +1,7 @@
 /* TermFleet-SSH
  * Light UI, dark terminals, draggable cards grouped into horizontal columns
- * with per-group command broadcast. The SSH transport (POST + WebSocket)
- * matches the original webssh backend contract.
+ * with per-group command broadcast. Terminal transport keeps the original
+ * POST + WebSocket contract; file uploads use the Worker-scoped upload route.
  */
 (function () {
   'use strict';
@@ -66,6 +66,28 @@
       removeGroup: '删除分组',
       broadcastPlaceholder: '向分组广播命令...',
       broadcastLabel: '向 {name} 广播命令',
+      uploadFile: '上传文件',
+      uploadToGroup: '向分组上传文件',
+      fileUpload: '文件上传',
+      uploadFileName: '文件',
+      uploadFileSize: '大小',
+      uploadTargets: '上传目标',
+      uploadDirectory: '目标目录',
+      currentDirectory: '终端当前目录',
+      homeDirectoryFallback: '未检测到当前目录，使用主目录',
+      overwriteExisting: '覆盖同名文件',
+      startUpload: '开始上传',
+      cancel: '取消',
+      preparingTargets: '正在读取目标目录...',
+      readyToUpload: '等待上传',
+      uploadingFile: '上传中 {progress}%',
+      uploadComplete: '上传完成',
+      uploadFailed: '上传失败：{reason}',
+      uploadSummary: '{file} 已上传到 {count} 个终端。',
+      uploadPartial: '{file}：成功 {success} 个，失败 {failed} 个。',
+      uploadCancelled: '上传已取消。',
+      noUploadTargets: '没有可上传文件的已连接终端。',
+      invalidUploadDirectory: '目标目录必须是绝对路径。',
       send: '发送',
       defaultGroup: '分组 {number}',
       production: '生产环境',
@@ -135,6 +157,7 @@
       logConnect: '连接 {name}',
       logDisconnect: '断开 {name}',
       logBroadcast: '向 {name} 广播 {detail}',
+      logUpload: '上传 {file} 到 {name}：{path}',
       logRenameTerminal: '终端重命名：{oldName} -> {newName}',
       logRenameGroup: '工作组重命名：{oldName} -> {newName}',
       logSettings: '更新系统设置',
@@ -166,6 +189,7 @@
       noHostsSelected: '请先选择要打开的主机。',
       openingSelectedHosts: '正在打开所选 {count} 台主机到 {name}。',
       maxTerminals: '最多终端数',
+      maxUploadSize: '单文件上传上限（MiB）',
       logLocalTerminal: '打开本机终端',
       logRestored: '恢复终端 {name}',
       restoringSessions: '正在恢复终端...',
@@ -207,6 +231,28 @@
       removeGroup: 'Remove group',
       broadcastPlaceholder: 'Broadcast command to group...',
       broadcastLabel: 'Broadcast command to {name}',
+      uploadFile: 'Upload file',
+      uploadToGroup: 'Upload file to group',
+      fileUpload: 'File upload',
+      uploadFileName: 'File',
+      uploadFileSize: 'Size',
+      uploadTargets: 'Upload targets',
+      uploadDirectory: 'Target directory',
+      currentDirectory: 'Terminal current directory',
+      homeDirectoryFallback: 'Current directory unavailable; using home',
+      overwriteExisting: 'Overwrite files with the same name',
+      startUpload: 'Start upload',
+      cancel: 'Cancel',
+      preparingTargets: 'Resolving target directories...',
+      readyToUpload: 'Ready',
+      uploadingFile: 'Uploading {progress}%',
+      uploadComplete: 'Upload complete',
+      uploadFailed: 'Upload failed: {reason}',
+      uploadSummary: 'Uploaded {file} to {count} terminals.',
+      uploadPartial: '{file}: {success} succeeded, {failed} failed.',
+      uploadCancelled: 'Upload cancelled.',
+      noUploadTargets: 'No connected terminals are available for upload.',
+      invalidUploadDirectory: 'Target directories must be absolute paths.',
       send: 'Send',
       defaultGroup: 'Group {number}',
       production: 'Production',
@@ -276,6 +322,7 @@
       logConnect: 'Connect {name}',
       logDisconnect: 'Disconnect {name}',
       logBroadcast: 'Broadcast {detail} to {name}',
+      logUpload: 'Upload {file} to {name}: {path}',
       logRenameTerminal: 'Rename terminal: {oldName} -> {newName}',
       logRenameGroup: 'Rename group: {oldName} -> {newName}',
       logSettings: 'Update system settings',
@@ -307,6 +354,7 @@
       noHostsSelected: 'Select at least one host to open.',
       openingSelectedHosts: 'Opening {count} selected hosts in {name}.',
       maxTerminals: 'Max terminals',
+      maxUploadSize: 'Maximum file size (MiB)',
       logLocalTerminal: 'Open local terminal',
       logRestored: 'Restore terminal {name}',
       restoringSessions: 'Restoring terminals...',
@@ -360,6 +408,9 @@
   var hostManagerPreviousFocus = null;
   var systemSettingsPreviousFocus = null;
   var hostManagerGroupId = null;
+  var uploadSelection = null;
+  var uploadPickerRecords = [];
+  var uploadPreviousFocus = null;
   var boardWheelLocked = false;
 
   // ---- DOM ---------------------------------------------------------------
@@ -397,6 +448,7 @@
   var fontSizeInput = $('#setting-font-size');
   var terminalHeightInput = $('#setting-terminal-height');
   var maxTerminalsInput = $('#setting-max-terminals');
+  var maxUploadSizeInput = $('#setting-max-upload');
   var clearLogButton = $('#clear-log');
   var operationLog = $('#operation-log');
   var openLogButton = $('#open-log');
@@ -407,6 +459,15 @@
   var privateKeyInput = $('#privatekey');
   var privateKeyName = $('#privatekey-name');
   var openLocalTerminalButton = $('#open-local-terminal');
+  var fileUploadPicker = $('#file-upload-picker');
+  var fileUploadOverlay = $('#file-upload-overlay');
+  var closeFileUploadButton = $('#close-file-upload');
+  var cancelFileUploadButton = $('#cancel-file-upload');
+  var startFileUploadButton = $('#start-file-upload');
+  var fileUploadName = $('#file-upload-name');
+  var fileUploadSize = $('#file-upload-size');
+  var fileUploadTargets = $('#file-upload-targets');
+  var overwriteUploadInput = $('#overwrite-upload');
 
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -434,6 +495,8 @@
   var ICONS = {
     grip: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
     send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-6 14-2-5-6-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+    plus: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    upload: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     trash: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     reconnect: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.1 7.1L4 9M5.5 14a7 7 0 0 0 12.4 2.9L20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     maximize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -461,6 +524,7 @@
       terminalFontSize: 13,
       terminalHeight: 300,
       maxTerminals: 20,
+      maxUploadSize: 100,
       shortcuts: Object.assign({}, DEFAULT_SHORTCUTS)
     };
     try {
@@ -488,6 +552,7 @@
       .then(function (data) {
         if (!data) { return; }
         settings.maxTerminals = data.maxconn || settings.maxTerminals;
+        settings.maxUploadSize = data.maxupload || settings.maxUploadSize;
         saveSettings();
         applySettingsToControls();
       });
@@ -496,6 +561,7 @@
   function saveSystemSettings() {
     var body = new window.URLSearchParams();
     body.set('maxconn', settings.maxTerminals);
+    body.set('maxupload', settings.maxUploadSize);
     body.set('_xsrf', xsrfToken());
     window.fetch('system-settings', {
       method: 'POST',
@@ -513,6 +579,7 @@
     fontSizeInput.value = settings.terminalFontSize;
     terminalHeightInput.value = settings.terminalHeight;
     maxTerminalsInput.value = settings.maxTerminals;
+    maxUploadSizeInput.value = settings.maxUploadSize;
     renderShortcutSettings();
     applyShortcutBindings();
   }
@@ -667,6 +734,7 @@
     settings.terminalFontSize = Math.max(10, Math.min(24, Number(fontSizeInput.value) || 13));
     settings.terminalHeight = Math.max(180, Math.min(720, Number(terminalHeightInput.value) || 300));
     settings.maxTerminals = Math.max(1, Math.min(500, Number(maxTerminalsInput.value) || 20));
+    settings.maxUploadSize = Math.max(1, Math.min(10240, Number(maxUploadSizeInput.value) || 100));
     saveSettings();
     saveSystemSettings();
     logAction('logSettings');
@@ -674,6 +742,7 @@
       var record = terminals[id];
       if (record.term) {
         record.term.setOption('fontSize', settings.terminalFontSize);
+        record.body.style.setProperty('--terminal-bottom-space', (settings.terminalFontSize / 2) + 'px');
         fitTerminal(record);
       }
     });
@@ -769,6 +838,7 @@
       var deleteBtn = groupButtons[1];
       var input = column.querySelector('.broadcast input');
       var shortcut = column.querySelector('.broadcast select');
+      var upload = column.querySelector('.broadcast-upload');
       var sendText = column.querySelector('.broadcast button span');
       if (nameEl) { nameEl.setAttribute('title', t('renameGroup')); }
       if (grip) {
@@ -798,6 +868,10 @@
         shortcut.options[5].textContent = t('tabKey');
         shortcut.options[6].textContent = t('escKey');
       }
+      if (upload) {
+        upload.setAttribute('title', t('uploadToGroup'));
+        upload.setAttribute('aria-label', t('uploadToGroup'));
+      }
       if (sendText) { sendText.textContent = t('send'); }
       updateEmptyState(group.id);
     });
@@ -808,21 +882,28 @@
   }
 
   function refreshTerminalLanguage(record) {
-    var buttons = record.card.querySelectorAll('.terminal-tools button');
+    var upload = record.card.querySelector('.upload-terminal');
+    var reconnect = record.card.querySelector('.reconnect-terminal');
+    var maximize = record.card.querySelector('.maximize-terminal');
+    var close = record.card.querySelector('.close-btn');
     var header = record.card.querySelector('.terminal-header');
     var placeholder = record.card.querySelector('.terminal-placeholder');
     var resize = record.card.querySelector('.resize-handle');
-    if (buttons[0]) {
-      buttons[0].setAttribute('title', t('reconnectTerminal'));
-      buttons[0].setAttribute('aria-label', t('reconnectTerminal'));
+    if (upload) {
+      upload.setAttribute('title', t('uploadFile'));
+      upload.setAttribute('aria-label', t('uploadFile'));
     }
-    if (buttons[1]) {
-      buttons[1].setAttribute('title', record.card.classList.contains('maximized') ? t('restore') : t('maximize'));
-      buttons[1].setAttribute('aria-label', t('maximize'));
+    if (reconnect) {
+      reconnect.setAttribute('title', t('reconnectTerminal'));
+      reconnect.setAttribute('aria-label', t('reconnectTerminal'));
     }
-    if (buttons[2]) {
-      buttons[2].setAttribute('title', t('close'));
-      buttons[2].setAttribute('aria-label', t('closeTerminal'));
+    if (maximize) {
+      maximize.setAttribute('title', record.card.classList.contains('maximized') ? t('restore') : t('maximize'));
+      maximize.setAttribute('aria-label', t('maximize'));
+    }
+    if (close) {
+      close.setAttribute('title', t('close'));
+      close.setAttribute('aria-label', t('closeTerminal'));
     }
     if (record.nameEl) { record.nameEl.setAttribute('title', t('renameTerminal')); }
     if (header) { header.setAttribute('aria-label', t('dragTerminal', { name: record.displayName || record.hostname })); }
@@ -963,7 +1044,8 @@
         reconnectInfo: safeReconnectInfo(record.reconnectInfo),
         groupId: record.group,
         groupName: group ? group.name : '',
-        isLocal: !!record.isLocal
+        isLocal: !!record.isLocal,
+        currentDirectory: record.currentDirectory || ''
       };
     }).filter(function (item) { return item.workerId; });
     saveSessionRecords(records);
@@ -1002,6 +1084,7 @@
             displayName: session.displayName,
             isLocal: session.isLocal,
             bodyHeight: session.bodyHeight,
+            currentDirectory: session.currentDirectory || '',
             reconnectInfo: session.reconnectInfo || null
           });
           record.workerId = session.workerId;
@@ -1249,7 +1332,7 @@
       });
       reconnectBtn.addEventListener('click', function () { reconnectTerminal(record); });
       maxBtn.addEventListener('click', function () {
-        var cardButton = record.card.querySelector('.terminal-tools button:nth-child(2)');
+        var cardButton = record.card.querySelector('.maximize-terminal');
         closeHostManager(false);
         toggleMaximize(record, cardButton);
       });
@@ -1321,6 +1404,7 @@
   }
 
   function openHostManager() {
+    if (!closeUploadDialog(false)) { return; }
     hostManagerPreviousFocus = modalReturnFocus(openHostManagerButton);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
@@ -1344,13 +1428,15 @@
 
   function modalReturnFocus(fallback) {
     var active = document.activeElement;
-    if (!active || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) || logOverlay.contains(active)) {
+    if (!active || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) ||
+        fileUploadOverlay.contains(active) || logOverlay.contains(active)) {
       return fallback;
     }
     return active;
   }
 
   function openSystemSettings() {
+    if (!closeUploadDialog(false)) { return; }
     systemSettingsPreviousFocus = modalReturnFocus(openSystemSettingsButton);
     closeHostManager(false);
     logOverlay.classList.remove('is-open');
@@ -1657,8 +1743,12 @@
       el('option', { value: 'tab', text: t('tabKey') }),
       el('option', { value: 'esc', text: t('escKey') })
     ]);
+    var uploadBtn = el('button', {
+      class: 'btn btn-icon broadcast-upload', type: 'button',
+      title: t('uploadToGroup'), 'aria-label': t('uploadToGroup'), html: ICONS.upload
+    });
     var sendBtn = el('button', { class: 'btn btn-accent btn-sm', type: 'submit', html: ICONS.send + '<span>' + t('send') + '</span>' });
-    var broadcastForm = el('form', { class: 'broadcast' }, [input, shortcutSelect, sendBtn]);
+    var broadcastForm = el('form', { class: 'broadcast' }, [input, shortcutSelect, uploadBtn, sendBtn]);
     broadcastForm.addEventListener('submit', function (event) {
       event.preventDefault();
       var value = input.value;
@@ -1671,6 +1761,9 @@
       if (!shortcutSelect.value) { return; }
       broadcastToGroup(group.id, shortcutSelect.value);
       shortcutSelect.value = '';
+    });
+    uploadBtn.addEventListener('click', function () {
+      chooseUploadFile(terminalsInGroup(group.id), uploadBtn);
     });
 
     var list = el('div', { class: 'terminal-list', dataset: { list: group.id } });
@@ -1818,10 +1911,12 @@
       ])
     ]);
 
-    var reconnectBtn = el('button', { type: 'button', title: t('reconnectTerminal'), 'aria-label': t('reconnectTerminal'), html: ICONS.reconnect });
-    var maxBtn = el('button', { type: 'button', title: t('maximize'), 'aria-label': t('maximize'), html: ICONS.maximize });
+    var uploadBtn = el('button', { class: 'upload-terminal', type: 'button', title: t('uploadFile'), 'aria-label': t('uploadFile'), html: ICONS.plus });
+    uploadBtn.disabled = true;
+    var reconnectBtn = el('button', { class: 'reconnect-terminal', type: 'button', title: t('reconnectTerminal'), 'aria-label': t('reconnectTerminal'), html: ICONS.reconnect });
+    var maxBtn = el('button', { class: 'maximize-terminal', type: 'button', title: t('maximize'), 'aria-label': t('maximize'), html: ICONS.maximize });
     var closeBtn = el('button', { class: 'close-btn', type: 'button', title: t('close'), 'aria-label': t('closeTerminal'), html: ICONS.close });
-    var tools = el('div', { class: 'terminal-tools' }, [reconnectBtn, maxBtn, closeBtn]);
+    var tools = el('div', { class: 'terminal-tools' }, [uploadBtn, reconnectBtn, maxBtn, closeBtn]);
 
     var header = el('div', {
       class: 'terminal-header', tabindex: '0', role: 'button',
@@ -1831,6 +1926,7 @@
     var bodyInner = el('div', { class: 'terminal-placeholder', text: t('establishing') });
     var body = el('div', { class: 'terminal-body', id: id + '-body' }, [bodyInner]);
     body.style.height = opts.bodyHeight || (settings.terminalHeight + 'px');
+    body.style.setProperty('--terminal-bottom-space', (settings.terminalFontSize / 2) + 'px');
     var resizeHandle = el('div', { class: 'resize-handle', title: t('resize'), 'aria-hidden': 'true' });
 
     var card = el('article', {
@@ -1846,7 +1942,8 @@
       port: opts.port, displayName: displayName, nameEl: nameEl, card: card, body: body,
       stateText: stateText, networkText: networkText, reconnectInfo: opts.reconnectInfo || null,
       term: null, sock: null, decoder: 'utf-8', state: 'connecting', stateKey: 'connecting', observer: null,
-      workerId: opts.workerId || null, isLocal: !!opts.isLocal
+      workerId: opts.workerId || null, isLocal: !!opts.isLocal,
+      currentDirectory: opts.currentDirectory || '', osc7Buffer: ''
     };
     terminals[id] = record;
 
@@ -1856,6 +1953,7 @@
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); }
     });
     closeBtn.addEventListener('click', function () { closeTerminal(id, t('userClosed')); });
+    uploadBtn.addEventListener('click', function () { chooseUploadFile([record], uploadBtn); });
     reconnectBtn.addEventListener('click', function () { reconnectTerminal(record); });
     maxBtn.addEventListener('click', function () { toggleMaximize(record, maxBtn); });
     nameEl.addEventListener('keydown', function (event) {
@@ -1885,6 +1983,8 @@
     record.card.classList.remove('is-connecting', 'is-connected', 'is-error');
     record.card.classList.add('is-' + state);
     record.stateText.textContent = stateKey ? t(stateKey) : (message || state);
+    var uploadButton = record.card.querySelector('.upload-terminal');
+    if (uploadButton) { uploadButton.disabled = state !== 'connected'; }
     setNetworkState(record, state === 'connected' ? 'online' : (state === 'connecting' ? 'connecting' : 'offline'));
     updateSummary();
   }
@@ -2016,6 +2116,8 @@
       removeSavedSession(record.workerId);
       record.workerId = null;
     }
+    record.currentDirectory = '';
+    record.osc7Buffer = '';
     setCardState(record, 'connecting', null, 'connecting');
     resetTerminalView(record, t('establishing'));
     toast(t('reconnectingTerminal', { name: record.displayName || record.hostname }));
@@ -2096,7 +2198,7 @@
   function maximize(record) {
     backdrop = el('div', { class: 'backdrop' });
     backdrop.addEventListener('click', function () {
-      var btn = record.card.querySelector('.terminal-tools button:nth-child(2)');
+      var btn = record.card.querySelector('.maximize-terminal');
       toggleMaximize(record, btn);
     });
     document.body.appendChild(backdrop);
@@ -2136,6 +2238,39 @@
     }
   }
 
+  function trackTerminalDirectory(record, text) {
+    var data = (record.osc7Buffer || '') + (text || '');
+    var pattern = /\x1b\]7;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+    var match;
+    var consumed = 0;
+    while ((match = pattern.exec(data))) {
+      consumed = pattern.lastIndex;
+      var uri = match[1];
+      if (uri.indexOf('file://') !== 0) { continue; }
+      var pathStart = uri.indexOf('/', 7);
+      if (pathStart === -1) { continue; }
+      var encodedPath = uri.slice(pathStart);
+      var path;
+      try { path = decodeURIComponent(encodedPath); } catch (e) { path = encodedPath; }
+      if (!path || path[0] !== '/' || path.length > 4096 || path.indexOf('\x00') !== -1) { continue; }
+      if (record.currentDirectory !== path) {
+        record.currentDirectory = path;
+        saveSessions();
+        if (record.sock && record.sock.readyState === window.WebSocket.OPEN) {
+          record.sock.send(JSON.stringify({ cwd: path }));
+        }
+      }
+    }
+    if (consumed) {
+      var remainder = data.slice(consumed);
+      var remainderStart = remainder.lastIndexOf('\x1b]7;');
+      record.osc7Buffer = remainderStart >= 0 ? remainder.slice(remainderStart, remainderStart + 4096) : remainder.slice(-16);
+    } else {
+      var start = data.lastIndexOf('\x1b]7;');
+      record.osc7Buffer = start >= 0 ? data.slice(start, start + 4096) : data.slice(-16);
+    }
+  }
+
   function openSocket(record, workerId, encoding) {
     var wsUrl = window.location.href.split(/\?|#/, 1)[0].replace('http', 'ws');
     var join = (wsUrl[wsUrl.length - 1] === '/' ? '' : '/');
@@ -2170,6 +2305,9 @@
       term.focus();
       observeResize(record);
       startLatencyProbe(record);
+      if (record.currentDirectory) {
+        sock.send(JSON.stringify({ cwd: record.currentDirectory }));
+      }
     };
 
     sock.onmessage = function (message) {
@@ -2186,6 +2324,7 @@
       }
       setNetworkState(record, 'online');
       readMessage(message.data, function (text) {
+        trackTerminalDirectory(record, text);
         if (record.term) { record.term.write(text); }
       }, record.decoder);
     };
@@ -2318,6 +2457,240 @@
     } else {
       toast(t('noConnected', { name: name }), 'error');
     }
+  }
+
+  function formatFileSize(size) {
+    if (size < 1024) { return size + ' B'; }
+    if (size < 1024 * 1024) { return (size / 1024).toFixed(1) + ' KB'; }
+    if (size < 1024 * 1024 * 1024) { return (size / (1024 * 1024)).toFixed(1) + ' MB'; }
+    return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  }
+
+  function uploadRecords(records) {
+    var seen = Object.create(null);
+    return (records || []).filter(function (record) {
+      if (!record || !record.workerId || record.state !== 'connected' || seen[record.workerId]) { return false; }
+      seen[record.workerId] = true;
+      return true;
+    });
+  }
+
+  function chooseUploadFile(records, trigger) {
+    var available = uploadRecords(records);
+    if (!available.length) {
+      toast(t('noUploadTargets'), 'error');
+      return;
+    }
+    uploadPickerRecords = available;
+    uploadPreviousFocus = trigger || document.activeElement;
+    fileUploadPicker.value = '';
+    fileUploadPicker.click();
+  }
+
+  function uploadResponse(response) {
+    return response.json().catch(function () { return {}; }).then(function (data) {
+      if (!response.ok) { throw new Error(data.status || response.statusText || t('requestFailed')); }
+      return data;
+    });
+  }
+
+  function resolveUploadTarget(record) {
+    return window.fetch('upload?id=' + encodeURIComponent(record.workerId), {
+      credentials: 'same-origin'
+    }).then(uploadResponse).then(function (data) {
+      return {
+        record: record,
+        path: data.path || '',
+        tracked: !!data.tracked,
+        available: true,
+        status: t('readyToUpload')
+      };
+    }).catch(function (error) {
+      return {
+        record: record,
+        path: record.currentDirectory || '',
+        tracked: !!record.currentDirectory,
+        available: false,
+        status: error.message || t('requestFailed')
+      };
+    });
+  }
+
+  function renderUploadTargets() {
+    fileUploadTargets.innerHTML = '';
+    (uploadSelection.targets || []).forEach(function (target) {
+      var inputId = 'upload-path-' + target.record.id;
+      var inputAttrs = {
+        id: inputId, type: 'text', value: target.path, spellcheck: 'false'
+      };
+      if (!target.available) { inputAttrs.disabled = 'disabled'; }
+      var pathInput = el('input', inputAttrs);
+      var status = el('span', {
+        class: 'upload-target-status' + (target.available ? '' : ' is-error'),
+        text: target.status
+      });
+      var progress = el('span', { class: 'upload-progress-bar' });
+      target.pathInput = pathInput;
+      target.statusEl = status;
+      target.progressEl = progress;
+      fileUploadTargets.appendChild(el('div', { class: 'upload-target-row' }, [
+        el('div', { class: 'upload-target-copy' }, [
+          el('strong', { text: target.record.displayName || target.record.hostname }),
+          el('span', { text: target.tracked ? t('currentDirectory') : t('homeDirectoryFallback') })
+        ]),
+        el('label', { class: 'upload-path-field', for: inputId }, [
+          el('span', { text: t('uploadDirectory') }), pathInput
+        ]),
+        el('div', { class: 'upload-target-result' }, [
+          status, el('span', { class: 'upload-progress' }, [progress])
+        ])
+      ]));
+    });
+  }
+
+  function openUploadDialog(file, records) {
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    uploadSelection = {
+      file: file, targets: [], uploading: false, finished: false,
+      cancelled: false, currentXhr: null
+    };
+    fileUploadName.textContent = file.name;
+    fileUploadSize.textContent = formatFileSize(file.size);
+    overwriteUploadInput.checked = false;
+    overwriteUploadInput.disabled = false;
+    fileUploadTargets.innerHTML = '';
+    fileUploadTargets.appendChild(el('div', { class: 'upload-loading', text: t('preparingTargets') }));
+    startFileUploadButton.disabled = true;
+    fileUploadOverlay.classList.add('is-open');
+    fileUploadOverlay.setAttribute('aria-hidden', 'false');
+    closeFileUploadButton.focus();
+    Promise.all(records.map(resolveUploadTarget)).then(function (targets) {
+      if (!uploadSelection || uploadSelection.file !== file) { return; }
+      uploadSelection.targets = targets;
+      renderUploadTargets();
+      startFileUploadButton.disabled = !targets.some(function (target) { return target.available; });
+      var firstInput = fileUploadTargets.querySelector('input:not([disabled])');
+      if (firstInput) { firstInput.focus(); } else { closeFileUploadButton.focus(); }
+    });
+  }
+
+  function closeUploadDialog(restoreFocus) {
+    if (!fileUploadOverlay.classList.contains('is-open')) { return true; }
+    if (uploadSelection && uploadSelection.uploading) { return false; }
+    fileUploadOverlay.classList.remove('is-open');
+    fileUploadOverlay.setAttribute('aria-hidden', 'true');
+    uploadSelection = null;
+    uploadPickerRecords = [];
+    if (restoreFocus !== false && uploadPreviousFocus && document.contains(uploadPreviousFocus)) {
+      uploadPreviousFocus.focus();
+    }
+    uploadPreviousFocus = null;
+    return true;
+  }
+
+  function setUploadTargetStatus(target, message, kind, progress) {
+    target.statusEl.textContent = message;
+    target.statusEl.classList.toggle('is-error', kind === 'error');
+    target.statusEl.classList.toggle('is-success', kind === 'success');
+    target.progressEl.style.width = Math.max(0, Math.min(100, progress || 0)) + '%';
+  }
+
+  function uploadFileToTarget(target, overwrite) {
+    return new Promise(function (resolve) {
+      var params = new window.URLSearchParams();
+      params.set('id', target.record.workerId);
+      params.set('filename', uploadSelection.file.name);
+      params.set('path', target.pathInput.value);
+      params.set('overwrite', overwrite ? '1' : '0');
+      var xhr = new window.XMLHttpRequest();
+      uploadSelection.currentXhr = xhr;
+      xhr.open('POST', 'upload?' + params.toString(), true);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.setRequestHeader('X-XSRFToken', xsrfToken());
+      xhr.upload.onprogress = function (event) {
+        var progress = event.lengthComputable ? Math.round(event.loaded / event.total * 100) : 0;
+        setUploadTargetStatus(target, t('uploadingFile', { progress: progress }), '', progress);
+      };
+      xhr.onload = function () {
+        var data;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = {}; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadTargetStatus(target, t('uploadComplete'), 'success', 100);
+          logAction('logUpload', {
+            file: uploadSelection.file.name,
+            name: target.record.displayName || target.record.hostname,
+            path: data.path || target.pathInput.value
+          });
+          resolve(true);
+        } else {
+          setUploadTargetStatus(target, t('uploadFailed', {
+            reason: data.status || xhr.statusText || t('requestFailed')
+          }), 'error', 0);
+          resolve(false);
+        }
+      };
+      xhr.onerror = function () {
+        setUploadTargetStatus(target, t('uploadFailed', { reason: t('requestFailed') }), 'error', 0);
+        resolve(false);
+      };
+      xhr.onabort = function () {
+        setUploadTargetStatus(target, t('uploadCancelled'), 'error', 0);
+        resolve(false);
+      };
+      xhr.send(uploadSelection.file);
+    });
+  }
+
+  function startFileUploads() {
+    if (!uploadSelection || uploadSelection.uploading) { return; }
+    var targets = uploadSelection.targets.filter(function (target) { return target.available; });
+    var invalid = targets.some(function (target) {
+      return !target.pathInput.value || target.pathInput.value[0] !== '/';
+    });
+    if (invalid) {
+      toast(t('invalidUploadDirectory'), 'error');
+      return;
+    }
+    uploadSelection.uploading = true;
+    startFileUploadButton.disabled = true;
+    closeFileUploadButton.disabled = true;
+    overwriteUploadInput.disabled = true;
+    cancelFileUploadButton.focus();
+    targets.forEach(function (target) { target.pathInput.disabled = true; });
+    var success = 0;
+    var chain = Promise.resolve();
+    targets.forEach(function (target) {
+      chain = chain.then(function () {
+        if (uploadSelection.cancelled) { return; }
+        return uploadFileToTarget(target, overwriteUploadInput.checked).then(function (uploaded) {
+          if (uploaded) { success += 1; }
+        });
+      });
+    });
+    chain.then(function () {
+      var failed = uploadSelection.targets.length - success;
+      uploadSelection.uploading = false;
+      uploadSelection.finished = true;
+      uploadSelection.currentXhr = null;
+      closeFileUploadButton.disabled = false;
+      cancelFileUploadButton.disabled = false;
+      var message = uploadSelection.cancelled ? t('uploadCancelled') : (failed ? t('uploadPartial', {
+        file: uploadSelection.file.name, success: success, failed: failed
+      }) : t('uploadSummary', { file: uploadSelection.file.name, count: success }));
+      toast(message, failed || uploadSelection.cancelled ? 'error' : 'success');
+      setStatus(message);
+    });
+  }
+
+  function cancelFileUploads() {
+    if (!uploadSelection || !uploadSelection.uploading) {
+      closeUploadDialog();
+      return;
+    }
+    uploadSelection.cancelled = true;
+    if (uploadSelection.currentXhr) { uploadSelection.currentXhr.abort(); }
   }
 
   // ---- Card drag (within / across groups) --------------------------------
@@ -2646,6 +3019,7 @@
   });
 
   function openLogOverlay() {
+    if (!closeUploadDialog(false)) { return; }
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.add('is-open');
@@ -2674,6 +3048,7 @@
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
+    if (!closeUploadDialog(false)) { return; }
     if (actionId === 'localTerminal') { openLocalTerminal(); }
     if (actionId === 'newGroup') { addGroup(null, { focus: true }); }
   }
@@ -2715,6 +3090,18 @@
     focusHostManagerGroup();
   });
   openLocalTerminalButton.addEventListener('click', openLocalTerminal);
+  fileUploadPicker.addEventListener('change', function () {
+    var file = fileUploadPicker.files && fileUploadPicker.files[0];
+    if (file && uploadPickerRecords.length) {
+      openUploadDialog(file, uploadPickerRecords.slice());
+    }
+  });
+  closeFileUploadButton.addEventListener('click', function () { closeUploadDialog(); });
+  cancelFileUploadButton.addEventListener('click', cancelFileUploads);
+  startFileUploadButton.addEventListener('click', startFileUploads);
+  fileUploadOverlay.addEventListener('click', function (event) {
+    if (event.target === fileUploadOverlay) { closeUploadDialog(); }
+  });
   privateKeyInput.addEventListener('change', function () {
     privateKeyName.textContent = privateKeyInput.files.length ? privateKeyInput.files[0].name : t('noFileChosen');
   });
@@ -2736,7 +3123,7 @@
     toast(t('allDisconnected'));
   });
 
-  [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput].forEach(function (input) {
+  [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput].forEach(function (input) {
     input.addEventListener('change', updateSettingsFromControls);
   });
   resetShortcutsButton.addEventListener('click', function () {
@@ -2803,7 +3190,15 @@
       trapModalFocus(systemSettingsOverlay, event);
       return;
     }
+    if (event.key === 'Tab' && fileUploadOverlay.classList.contains('is-open')) {
+      trapModalFocus(fileUploadOverlay, event);
+      return;
+    }
     if (event.key === 'Escape') {
+      if (fileUploadOverlay.classList.contains('is-open')) {
+        closeUploadDialog();
+        return;
+      }
       if (hostManagerOverlay.classList.contains('is-open')) {
         closeHostManager();
         return;
@@ -2823,7 +3218,7 @@
       Object.keys(terminals).forEach(function (id) {
         var record = terminals[id];
         if (record.card.classList.contains('maximized')) {
-          var btn = record.card.querySelector('.terminal-tools button:nth-child(2)');
+          var btn = record.card.querySelector('.maximize-terminal');
           toggleMaximize(record, btn);
         }
       });

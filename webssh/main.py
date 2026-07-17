@@ -6,7 +6,8 @@ from tornado.options import options
 from webssh import handler
 from webssh.handler import (
     IndexHandler, SSHConfigHandler, SystemSettingsHandler,
-    ActiveWorkersHandler, LocalTerminalHandler, WsockHandler, NotFoundHandler
+    ActiveWorkersHandler, LocalTerminalHandler, UploadHandler, WsockHandler,
+    NotFoundHandler
 )
 from webssh.settings import (
     get_app_settings,  get_host_keys_settings, get_policy_setting,
@@ -25,6 +26,7 @@ def make_handlers(loop, options):
         (r'/system-settings', SystemSettingsHandler),
         (r'/active-workers', ActiveWorkersHandler),
         (r'/local-terminal', LocalTerminalHandler, dict(loop=loop)),
+        (r'/upload', UploadHandler, dict(loop=loop)),
         (r'/ws', WsockHandler, dict(loop=loop))
     ]
     return handlers

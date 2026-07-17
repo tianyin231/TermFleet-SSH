@@ -13,6 +13,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - a top-right system-settings modal for terminal and connection preferences plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
 - per-group command and control-key broadcast;
+- single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
 - group create, rename, reorder, horizontal resize, fullscreen, delete, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
 - restoration of server workers that survive a browser refresh;
@@ -28,8 +29,9 @@ Browser single-page workspace
   |-- HTTP POST / ----------------------> create Paramiko SSH Worker
   |-- HTTP POST /local-terminal --------> create PTY-backed local Worker
   |-- HTTP GET /ssh-config -------------> discover OpenSSH aliases
-  |-- HTTP GET/POST /system-settings ---> read/change process-wide maxconn
+  |-- HTTP GET/POST /system-settings ---> read/change process-wide runtime limits
   |-- HTTP GET /active-workers ---------> list live worker IDs for client IP
+  |-- HTTP GET/POST /upload ------------> resolve target/upload raw file to Worker
   `-- WebSocket /ws?id=<worker-id> <----> bind xterm input/output to Worker
 
 Worker -> Paramiko Channel -> remote SSH server
@@ -43,8 +45,8 @@ Worker -> PTYChannel -> server-local shell process
 | Path | Responsibility |
 | --- | --- |
 | `webssh/main.py` | Application construction, route registration, HTTP/HTTPS listeners |
-| `webssh/handler.py` | HTTP/WebSocket handlers, request/security checks, SSH config parsing, authentication, SSH and local-worker creation |
-| `webssh/worker.py` | Live worker registry, channel I/O, handler rebinding, cleanup, local process and PTY adapters |
+| `webssh/handler.py` | HTTP/WebSocket handlers, request/security checks, streamed upload staging, SSH config parsing, authentication, SSH and local-worker creation |
+| `webssh/worker.py` | Live worker registry, channel I/O, SFTP/local file writes, handler rebinding, cleanup, local process and PTY adapters |
 | `webssh/settings.py` | Tornado CLI options, app/server/TLS/origin/font/host-key settings |
 | `webssh/policy.py` | Paramiko missing-host-key policies and thread-safe auto-add behavior |
 | `webssh/utils.py` | Encoding, address, hostname, origin, and domain helpers |
@@ -79,12 +81,14 @@ Worker -> PTYChannel -> server-local shell process
 | Route | Method | Contract |
 | --- | --- | --- |
 | `/` | GET | Render the workspace |
-| `/` | POST | Accept SSH form fields and return `{id, status, encoding}`; handled errors intentionally return HTTP 200 with `status` |
+| `/` | POST | Accept SSH form fields, create a Worker with supported temporary directory tracking, and return `{id, status, encoding}`; handled errors intentionally return HTTP 200 with `status` |
 | `/ssh-config` | GET | Return `{path, hosts}`; hosts contain alias, hostname, username, port, and `has_identity_file` only |
-| `/system-settings` | GET | Return process-wide `{maxconn}` |
-| `/system-settings` | POST | Validate `maxconn` in 1..500 and mutate the running process option |
+| `/system-settings` | GET | Return process-wide `{maxconn, maxupload}` |
+| `/system-settings` | POST | Validate `maxconn` in 1..500 and `maxupload` in 1..10240 MiB, then mutate both running process options |
 | `/active-workers` | GET | Return live worker IDs for the resolved client IP as `{ids}` |
-| `/local-terminal` | POST | Create the server user's shell PTY and return `{id, status, encoding}` |
+| `/local-terminal` | POST | Create the server user's shell PTY, install supported temporary directory tracking, and return `{id, status, encoding}` |
+| `/upload?id=...` | GET | Resolve the Worker upload directory as `{path, tracked, local}`; uses OSC 7 state or the SSH home/local startup directory fallback |
+| `/upload?id=...&filename=...&path=...&overwrite=...` | POST | Stream a raw file body into the Worker's absolute target directory; default maximum is 100 MiB and overwrite requires `overwrite=1` |
 | `/ws?id=...` | WebSocket | Attach the socket to an existing worker owned by the same resolved client IP |
 
 SSH form fields are `hostname`, `username`, `port`, `password`, `privatekey`, `passphrase`, `totp`, `term`, and optional `ssh_config_host`. `target_group` is client-only routing metadata.
@@ -96,6 +100,7 @@ Client text frames are JSON objects:
 - `{data: string}` queues terminal input for the channel;
 - `{resize: [cols, rows]}` resizes the SSH or local PTY;
 - `{ping: value}` requests `{pong: value}` for UI latency measurement.
+- `{cwd: absolute-path}` records an OSC 7 working-directory update for upload targeting.
 
 Server terminal output is sent as binary frames. A newly bound socket replaces any old handler for the worker. Do not convert terminal output to JSON without migrating the decoder and tests.
 
@@ -123,9 +128,9 @@ Restoration is therefore short-lived, per process, and keyed by client IP. It do
 | `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, and customizable toolbar shortcut bindings |
 | `wssh-operation-logs` | capped client-side operation log records |
 | `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, and manual-size flag; older layout records reset to the new default spans on restore |
-| `wssh-sessions` | worker ID, display metadata, group, height, local flag, and sanitized reconnect metadata |
+| `wssh-sessions` | worker ID, display metadata, group, height, local flag, last OSC 7 directory, and sanitized reconnect metadata |
 
-The client-side maximum-terminal setting is synchronized to process-wide backend `options.maxconn`. It is not scoped to a user or browser.
+The client-side maximum-terminal and upload-size settings are synchronized to process-wide backend `options.maxconn` and `options.maxupload`. They are not scoped to a user or browser. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
 
 ## Security and Ownership Invariants
 
@@ -136,6 +141,7 @@ The client-side maximum-terminal setting is synchronized to process-wide backend
 - Private-key upload length is capped and parsed through Paramiko.
 - `clients` is keyed only by resolved client IP. Clients sharing an IP can list the same worker IDs through `/active-workers`; a caller that knows an ID can bind `/ws` and detach the previous handler. Treat this as an ownership/isolation limitation, not authenticated session isolation.
 - `/local-terminal` grants a shell as the web server OS user. Treat exposure and authorization changes as security-sensitive.
+- `/upload` uses the same client-IP/worker-ID ownership boundary as WebSocket attachment. It stages request bodies in temporary files, cleans them after success/failure/disconnect, rejects non-absolute target directories and unsafe filenames, and does not overwrite unless explicitly requested.
 - `/system-settings` mutates global runtime state. There is currently no user authentication or role check.
 
 ## Verification and Current Gaps
@@ -151,7 +157,7 @@ On 2026-07-17, JS syntax passed. The local `.venv` used Python 3.9 even though t
 
 Coverage is strongest for inherited SSH authentication, request validation, policies, origins, encoding, and basic WebSocket I/O. Coverage is weak or absent for:
 
-- `/ssh-config`, `/system-settings`, `/active-workers`, and `/local-terminal` end-to-end behavior;
+- `/ssh-config`, `/system-settings`, `/active-workers`, `/local-terminal`, and `/upload` end-to-end behavior;
 - local-process cleanup and PTY lifecycle;
 - full refresh restoration and worker rebinding;
 - recycle-timer cancellation, stale callbacks, and repeated detach/rebind sequences;
@@ -166,6 +172,7 @@ Add focused tests around the changed behavior instead of relying only on the inh
 
 - Python requirement in project docs: 3.10+.
 - Runtime dependencies are pinned in `requirements.txt`: Paramiko 3.5.1 and Tornado 6.5.1. `setup.py` permits much older versions (`paramiko>=2.3.1`, `tornado>=4.5.0`), so dependency-compatibility changes must check both installation paths.
+- `--maxupload` sets the per-file upload limit in MiB and defaults to 100. The upload route raises its own streaming body limit without changing the 1 MiB limit on other requests.
 - `Dockerfile` uses `python:3-alpine`, installs dependencies, creates an unprivileged `webssh` user with `/bin/false`, and runs `python run.py`.
 - `docker-compose.yml` builds the repository and publishes port 8888.
 - Reverse proxies must forward WebSocket Upgrade headers. Correct `xheaders` and `trusted_downstream` settings are part of client ownership and security.

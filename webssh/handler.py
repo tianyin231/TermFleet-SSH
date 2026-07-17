@@ -7,9 +7,11 @@ import pty
 import socket
 import struct
 import subprocess
+import tempfile
 import traceback
 import weakref
 import paramiko
+import tornado.gen
 import tornado.web
 
 from concurrent.futures import ThreadPoolExecutor
@@ -380,14 +382,24 @@ class SSHConfigHandler(MixinHandler, tornado.web.RequestHandler):
 class SystemSettingsHandler(MixinHandler, tornado.web.RequestHandler):
 
     def get(self):
-        self.write({'maxconn': options.maxconn})
+        self.write({
+            'maxconn': options.maxconn,
+            'maxupload': options.maxupload
+        })
 
     def post(self):
-        value = to_int(self.get_argument('maxconn', ''))
-        if value is None or value < 1 or value > 500:
+        maxconn = to_int(self.get_argument('maxconn', ''))
+        maxupload = to_int(self.get_argument('maxupload', options.maxupload))
+        if maxconn is None or maxconn < 1 or maxconn > 500:
             raise tornado.web.HTTPError(400, 'Invalid maxconn')
-        options.maxconn = value
-        self.write({'maxconn': options.maxconn})
+        if maxupload is None or maxupload < 1 or maxupload > 10240:
+            raise tornado.web.HTTPError(400, 'Invalid maxupload')
+        options.maxconn = maxconn
+        options.maxupload = maxupload
+        self.write({
+            'maxconn': options.maxconn,
+            'maxupload': options.maxupload
+        })
 
 
 class ActiveWorkersHandler(MixinHandler, tornado.web.RequestHandler):
@@ -419,7 +431,11 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
             close_fds=True, env=env, preexec_fn=os.setsid
         )
         os.close(slave)
-        worker = Worker(self.loop, LocalProcess(proc), PTYChannel(master), ('localhost', 0))
+        worker = Worker(
+            self.loop, LocalProcess(proc, os.getcwd()), PTYChannel(master),
+            ('localhost', 0)
+        )
+        worker.enable_directory_tracking(os.path.basename(shell))
         worker.encoding = 'utf-8'
         if not workers:
             clients[ip] = workers
@@ -614,6 +630,20 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         logging.warning('Could not detect the default encoding.')
         return 'utf-8'
 
+    def get_default_shell(self, ssh):
+        try:
+            _, stdout, _ = ssh.exec_command(
+                'printf %s "$SHELL"', timeout=1
+            )
+            data = stdout.read(256)
+        except (EOFError, IOError, OSError, paramiko.SSHException, socket.timeout):
+            return ''
+        try:
+            shell = to_str(data.strip(), 'utf-8').rsplit('/', 1)[-1].lower()
+        except UnicodeDecodeError:
+            return ''
+        return shell if shell in ('bash', 'zsh', 'fish') else ''
+
     def ssh_connect(self, args):
         ssh = self.ssh_client
         dst_addr = args[:2]
@@ -632,8 +662,9 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
 
         term = self.get_argument('term', u'') or u'xterm'
         chan = ssh.invoke_shell(term=term)
-        chan.setblocking(0)
         worker = Worker(self.loop, ssh, chan, dst_addr)
+        worker.enable_directory_tracking(self.get_default_shell(ssh))
+        chan.setblocking(0)
         worker.encoding = options.encoding if options.encoding else \
             self.get_default_encoding(ssh)
         return worker
@@ -692,6 +723,112 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             self.result.update(id=worker.id, encoding=worker.encoding)
 
         self.write(self.result)
+
+
+@tornado.web.stream_request_body
+class UploadHandler(MixinHandler, tornado.web.RequestHandler):
+
+    executor = ThreadPoolExecutor(max_workers=cpu_count()*2)
+
+    def initialize(self, loop):
+        super(UploadHandler, self).initialize(loop)
+        self.worker = None
+        self.filename = None
+        self.upload_file = None
+        self.upload_path = None
+        self.received_size = 0
+
+    def get_worker(self):
+        ip, _ = self.get_client_addr()
+        worker = clients.get(ip, {}).get(self.get_value('id'))
+        if not worker or worker.closed:
+            raise tornado.web.HTTPError(404, 'Terminal session not found.')
+        return worker
+
+    def prepare(self):
+        if self.request.method != 'POST':
+            return
+        self.worker = self.get_worker()
+        self.filename = self.get_value('filename')
+        if (self.filename in ('.', '..') or '/' in self.filename or
+                '\\' in self.filename or '\x00' in self.filename or
+                len(self.filename) > 255):
+            raise tornado.web.HTTPError(400, 'Invalid filename.')
+        content_length = to_int(self.request.headers.get('Content-Length'))
+        max_size = options.maxupload * 1024 * 1024
+        self.request.connection.set_max_body_size(max_size)
+        if content_length is not None and content_length > max_size:
+            raise tornado.web.HTTPError(413, 'File exceeds upload limit.')
+        upload_file = tempfile.NamedTemporaryFile(
+            prefix='wssh-upload-', delete=False
+        )
+        self.upload_file = upload_file
+        self.upload_path = upload_file.name
+
+    def data_received(self, chunk):
+        if not self.upload_file:
+            return
+        self.received_size += len(chunk)
+        if self.received_size > options.maxupload * 1024 * 1024:
+            self.cleanup_upload()
+            raise tornado.web.HTTPError(413, 'File exceeds upload limit.')
+        self.upload_file.write(chunk)
+
+    @tornado.gen.coroutine
+    def get(self):
+        worker = self.get_worker()
+        try:
+            path = yield self.executor.submit(worker.get_upload_directory)
+        except (IOError, OSError, paramiko.SSHException, ValueError) as exc:
+            raise tornado.web.HTTPError(400, str(exc))
+        self.write({
+            'path': path,
+            'tracked': bool(worker.current_directory),
+            'local': isinstance(worker.ssh, LocalProcess)
+        })
+
+    @tornado.gen.coroutine
+    def post(self):
+        if self.upload_file:
+            self.upload_file.close()
+            self.upload_file = None
+        directory = self.get_argument('path', '')
+        overwrite = self.get_argument('overwrite', '0') == '1'
+        try:
+            destination = yield self.executor.submit(
+                self.worker.upload_file, self.upload_path, self.filename,
+                directory, overwrite
+            )
+        except FileExistsError:
+            raise tornado.web.HTTPError(409, 'A file with this name already exists.')
+        except (IOError, OSError, paramiko.SSHException, ValueError) as exc:
+            raise tornado.web.HTTPError(400, str(exc))
+        finally:
+            self.cleanup_upload()
+        self.write({'path': destination, 'size': self.received_size})
+
+    def cleanup_upload(self):
+        if self.upload_file:
+            self.upload_file.close()
+            self.upload_file = None
+        if self.upload_path:
+            try:
+                os.unlink(self.upload_path)
+            except OSError:
+                pass
+            self.upload_path = None
+
+    def on_connection_close(self):
+        self.cleanup_upload()
+        super(UploadHandler, self).on_connection_close()
+
+    def write_error(self, status_code, **kwargs):
+        self.cleanup_upload()
+        reason = self._reason
+        exc_info = kwargs.get('exc_info')
+        if exc_info and getattr(exc_info[1], 'log_message', None):
+            reason = exc_info[1].log_message
+        self.finish({'status': reason})
 
 
 class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
@@ -753,6 +890,10 @@ class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
         if ping is not None:
             self.write_message(json.dumps({'pong': ping}))
             return
+
+        cwd = msg.get('cwd')
+        if cwd and isinstance(cwd, UnicodeType):
+            worker.set_current_directory(cwd)
 
         resize = msg.get('resize')
         if resize and len(resize) == 2:

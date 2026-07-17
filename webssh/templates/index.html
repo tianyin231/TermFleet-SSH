@@ -979,6 +979,203 @@
         opacity: 0.35;
       }
 
+      .file-upload-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 58;
+        display: none;
+        padding: 24px;
+        align-items: center;
+        justify-content: center;
+        background: rgba(2, 6, 23, 0.64);
+        backdrop-filter: blur(3px);
+      }
+
+      .file-upload-overlay.is-open {
+        display: flex;
+      }
+
+      .file-upload-dialog {
+        display: flex;
+        flex-direction: column;
+        width: min(900px, 100%);
+        max-height: min(720px, calc(100dvh - 48px));
+        overflow: hidden;
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .file-upload-head,
+      .file-upload-footer,
+      .upload-file-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .file-upload-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .file-upload-head h2,
+      .file-upload-body h3 {
+        margin: 0;
+      }
+
+      .file-upload-head h2 {
+        font-size: 17px;
+      }
+
+      .file-upload-body h3 {
+        font-size: 13px;
+      }
+
+      .file-upload-body {
+        min-height: 0;
+        overflow-y: auto;
+      }
+
+      .upload-file-summary {
+        padding: 14px 18px;
+        color: var(--ink-soft);
+        background: var(--panel-soft);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .upload-file-summary strong {
+        display: block;
+        max-width: min(620px, 70vw);
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 14px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .upload-file-summary span {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .upload-target-heading {
+        padding: 14px 18px 8px;
+      }
+
+      .upload-target-list {
+        min-height: 96px;
+      }
+
+      .upload-loading {
+        padding: 26px 18px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .upload-target-row {
+        display: grid;
+        grid-template-columns: minmax(140px, 0.7fr) minmax(260px, 1.6fr) minmax(130px, 0.7fr);
+        gap: 14px;
+        align-items: center;
+        padding: 12px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .upload-target-copy,
+      .upload-path-field,
+      .upload-target-result {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .upload-target-copy strong {
+        overflow: hidden;
+        font-size: 13px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .upload-target-copy span,
+      .upload-path-field > span,
+      .upload-target-status {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .upload-path-field input {
+        width: 100%;
+        min-width: 0;
+        min-height: 38px;
+        padding: 7px 10px;
+        color: var(--ink);
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .upload-path-field input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+      }
+
+      .upload-target-status.is-success {
+        color: var(--accent-strong);
+      }
+
+      .upload-target-status.is-error {
+        color: var(--danger);
+      }
+
+      .upload-progress {
+        height: 4px;
+        overflow: hidden;
+        background: var(--line);
+        border-radius: 999px;
+      }
+
+      .upload-progress-bar {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--primary);
+        transition: width 160ms ease;
+      }
+
+      .file-upload-footer {
+        padding: 12px 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      .overwrite-upload {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .overwrite-upload input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--primary);
+        cursor: pointer;
+      }
+
+      .overwrite-upload input:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
       .host-manager-overlay {
         position: fixed;
         inset: 0;
@@ -1405,7 +1602,7 @@
 
       .broadcast {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 112px auto;
+        grid-template-columns: minmax(0, 1fr) 112px 40px auto;
         gap: 8px;
         padding: 10px 12px;
         border-bottom: 1px solid var(--line);
@@ -1626,6 +1823,11 @@
         border-color: #475569;
       }
 
+      .terminal-tools button:disabled {
+        cursor: not-allowed;
+        opacity: 0.38;
+      }
+
       .terminal-tools button.close-btn:hover {
         color: #ffffff;
         background: var(--danger);
@@ -1653,7 +1855,7 @@
       .terminal-body {
         position: relative;
         height: 300px;
-        padding: 8px 10px;
+        padding: 4px 10px var(--terminal-bottom-space, 6.5px);
         overflow: hidden;
       }
 
@@ -1883,6 +2085,38 @@
 
         .settings-overlay {
           padding: 10px;
+        }
+
+        .file-upload-overlay {
+          padding: 10px;
+        }
+
+        .file-upload-dialog {
+          max-height: calc(100dvh - 20px);
+        }
+
+        .upload-target-row {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 10px;
+        }
+
+        .upload-path-field input {
+          min-height: 44px;
+        }
+
+        .file-upload-footer {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .file-upload-footer .top-actions {
+          width: 100%;
+          justify-content: flex-end;
+        }
+
+        .broadcast-upload {
+          width: 44px;
+          height: 44px;
         }
 
         .settings-dialog {
@@ -2130,6 +2364,43 @@
     </div>
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+    <input type="file" id="file-upload-picker" hidden>
+    <div class="file-upload-overlay" id="file-upload-overlay" aria-labelledby="file-upload-title" aria-modal="true" aria-hidden="true" role="dialog">
+      <section class="file-upload-dialog">
+        <header class="file-upload-head">
+          <h2 id="file-upload-title" data-i18n="fileUpload">文件上传</h2>
+          <button class="btn btn-icon" type="button" id="close-file-upload" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="file-upload-body">
+          <div class="upload-file-summary">
+            <div>
+              <span data-i18n="uploadFileName">文件</span>
+              <strong id="file-upload-name"></strong>
+            </div>
+            <div>
+              <span data-i18n="uploadFileSize">大小</span>
+              <strong id="file-upload-size"></strong>
+            </div>
+          </div>
+          <h3 class="upload-target-heading" data-i18n="uploadTargets">上传目标</h3>
+          <div class="upload-target-list" id="file-upload-targets" aria-live="polite"></div>
+        </div>
+        <footer class="file-upload-footer">
+          <label class="overwrite-upload">
+            <input type="checkbox" id="overwrite-upload">
+            <span data-i18n="overwriteExisting">覆盖同名文件</span>
+          </label>
+          <div class="top-actions">
+            <button class="btn btn-sm" type="button" id="cancel-file-upload" data-i18n="cancel">取消</button>
+            <button class="btn btn-primary btn-sm" type="button" id="start-file-upload" data-i18n="startUpload">开始上传</button>
+          </div>
+        </footer>
+      </section>
+    </div>
     <div class="settings-overlay" id="system-settings-overlay" aria-labelledby="system-settings-title" aria-modal="true" aria-hidden="true" role="dialog">
       <section class="settings-dialog">
         <header class="settings-head">
@@ -2162,6 +2433,10 @@
             <label class="setting-row" for="setting-max-terminals">
               <span data-i18n="maxTerminals">最多终端数</span>
               <input type="number" id="setting-max-terminals" min="1" max="500" value="20">
+            </label>
+            <label class="setting-row" for="setting-max-upload">
+              <span data-i18n="maxUploadSize">单文件上传上限（MiB）</span>
+              <input type="number" id="setting-max-upload" min="1" max="10240" value="100">
             </label>
           </section>
           <section class="settings-section" aria-labelledby="keyboard-shortcuts-title">
