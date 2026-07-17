@@ -6,13 +6,14 @@ Verified against the repository on 2026-07-17. Re-check affected facts against s
 
 TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It supports:
 
-- multiple xterm.js terminal cards grouped in resizable, reorderable work groups;
+- multiple xterm.js terminal cards grouped in horizontally resizable, reorderable work groups;
+- a layered auto-collapsing connection sidebar with a full-height invisible edge trigger, a small centered overlay cue, and a subtle slide/fade panel over the terminal workspace on pointer hover or keyboard focus;
 - SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
-- host discovery from an OpenSSH config file, including server-side identity-file use, alias-first terminal titles, click-to-toggle multi-select, Ctrl/Command compatibility, and additive Shift range selection;
+- a top-right host manager opened by button or Ctrl/Command+Shift+H, with target-group creation and selection, SSH-config hosts on the left, current-group terminals on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
 - server-local shell sessions through a PTY;
 - per-group command and control-key broadcast;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
-- group create, rename, reorder, resize, fullscreen, delete, and layout persistence;
+- group create, rename, reorder, horizontal resize, fullscreen, delete, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
 - restoration of server workers that survive a browser refresh;
 - local settings, operation logs, and Chinese/English UI.
 
@@ -120,7 +121,7 @@ Restoration is therefore short-lived, per process, and keyed by client IP. It do
 | `wssh-language` | `zh` or `en` |
 | `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, and max terminals |
 | `wssh-operation-logs` | capped client-side operation log records |
-| `wssh-groups` | group IDs, names, order, grid spans, and manual-size flag |
+| `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, and manual-size flag; older layout records reset to the new default spans on restore |
 | `wssh-sessions` | worker ID, display metadata, group, height, local flag, and sanitized reconnect metadata |
 
 The client-side maximum-terminal setting is synchronized to process-wide backend `options.maxconn`. It is not scoped to a user or browser.

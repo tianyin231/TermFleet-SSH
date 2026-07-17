@@ -36,7 +36,6 @@
       languageButton: 'EN',
       appTitle: 'TermFleet-SSH',
       skipTerminals: '跳到终端列表',
-      togglePanel: '切换连接面板',
       toggleLanguage: '切换语言',
       newGroup: '新建分组',
       disconnectAll: '全部断开',
@@ -101,6 +100,11 @@
       closed: '已关闭',
       clientDisconnected: '客户端已断开',
       recognizedHosts: '已识别主机',
+      hosts: '主机',
+      hostManager: '主机管理',
+      currentGroup: '当前分组',
+      openedInGroup: '分组内已打开',
+      noOpenTerminals: '当前分组暂无已打开终端。',
       refreshHosts: '刷新',
       loadingHosts: '正在读取 SSH 配置...',
       noHosts: '没有识别到可用主机。',
@@ -152,8 +156,6 @@
       openSelectedHosts: '打开所选（{count}）',
       noHostsSelected: '请先选择要打开的主机。',
       openingSelectedHosts: '正在打开所选 {count} 台主机到 {name}。',
-      collapseHosts: '收起',
-      expandHosts: '展开',
       maxTerminals: '最多终端数',
       logLocalTerminal: '打开本机终端',
       logRestored: '恢复终端 {name}',
@@ -166,7 +168,6 @@
       languageButton: '中文',
       appTitle: 'TermFleet-SSH',
       skipTerminals: 'Skip to terminals',
-      togglePanel: 'Toggle connection panel',
       toggleLanguage: 'Switch language',
       newGroup: 'New group',
       disconnectAll: 'Disconnect all',
@@ -231,6 +232,11 @@
       closed: 'closed',
       clientDisconnected: 'client disconnected',
       recognizedHosts: 'Recognized hosts',
+      hosts: 'Hosts',
+      hostManager: 'Host manager',
+      currentGroup: 'Current group',
+      openedInGroup: 'Open in this group',
+      noOpenTerminals: 'No terminals are open in this group.',
       refreshHosts: 'Refresh',
       loadingHosts: 'Reading SSH config...',
       noHosts: 'No usable hosts found.',
@@ -282,8 +288,6 @@
       openSelectedHosts: 'Open selected ({count})',
       noHostsSelected: 'Select at least one host to open.',
       openingSelectedHosts: 'Opening {count} selected hosts in {name}.',
-      collapseHosts: 'Collapse',
-      expandHosts: 'Expand',
       maxTerminals: 'Max terminals',
       logLocalTerminal: 'Open local terminal',
       logRestored: 'Restore terminal {name}',
@@ -316,10 +320,11 @@
   var focusedGroupId = null;
   var operationLogs = loadLogs();
   var settings = loadSettings();
-  var sshConfigCollapsed = false;
   var selectedSshConfigHosts = Object.create(null);
   var sshConfigSelectionAnchor = null;
   var groupLayoutObserver = null;
+  var hostManagerPreviousFocus = null;
+  var boardWheelLocked = false;
 
   // ---- DOM ---------------------------------------------------------------
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -338,6 +343,13 @@
   var selectAllSshConfig = $('#select-all-ssh-config');
   var openSelectedSshConfig = $('#open-selected-ssh-config');
   var openSelectedSshConfigLabel = $('#open-selected-ssh-config-label');
+  var openHostManagerButton = $('#open-host-manager');
+  var closeHostManagerButton = $('#close-host-manager');
+  var hostManagerOverlay = $('#host-manager-overlay');
+  var hostManagerGroupSelect = $('#host-manager-group');
+  var hostManagerAddGroup = $('#host-manager-add-group');
+  var hostManagerOpenList = $('#host-manager-open-list');
+  var hostManagerOpenCount = $('#host-manager-open-count');
   var sshConfigHosts = [];
   var confirmDisconnectInput = $('#setting-confirm-disconnect');
   var broadcastEnterInput = $('#setting-broadcast-enter');
@@ -353,7 +365,6 @@
   var logOutput = $('#log-output');
   var privateKeyInput = $('#privatekey');
   var privateKeyName = $('#privatekey-name');
-  var toggleSshConfigButton = $('#toggle-ssh-config');
   var openLocalTerminalButton = $('#open-local-terminal');
 
   function el(tag, attrs, children) {
@@ -546,8 +557,8 @@
     refreshGroupSelect();
     refreshDynamicLanguage();
     renderSshConfigHosts();
+    renderHostManagerTerminals();
     renderLog();
-    updateSshConfigCollapse();
     if (!privateKeyInput.files.length) { privateKeyName.textContent = t('noFileChosen'); }
     updateSummary();
     setStatus(t('readyDetail'));
@@ -717,6 +728,7 @@
         name: group.name,
         nameKey: group.nameKey || null,
         number: group.number,
+        layoutMode: 'stacked-v1',
         colSpan: column ? Number(column.dataset.colSpan) || null : group.colSpan || null,
         rowSpan: column ? Number(column.dataset.rowSpan) || null : group.rowSpan || null,
         manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize
@@ -729,13 +741,14 @@
     var saved = loadGroupRecords();
     if (!saved.length) { return false; }
     saved.forEach(function (item) {
+      var stackedLayout = item.layoutMode === 'stacked-v1';
       addGroup(item.name, {
         id: item.id,
         nameKey: item.nameKey,
         number: item.number,
-        colSpan: item.colSpan,
-        rowSpan: item.rowSpan,
-        manualSize: item.manualSize,
+        colSpan: stackedLayout ? item.colSpan : null,
+        rowSpan: stackedLayout ? item.rowSpan : null,
+        manualSize: stackedLayout && item.manualSize,
         skipSave: true
       });
     });
@@ -820,9 +833,8 @@
   }
 
   function openSshConfigHost(host) {
-    fillFromSshConfigHost(host);
-    var data = new window.FormData(connectForm);
-    cleanData(data);
+    var groupId = hostManagerGroupSelect.value || groupSelect.value;
+    var data = sshConfigHostFormData(host, groupId);
     var errors = validateData(data);
     if (errors.length) {
       setStatus(errors.join(' '));
@@ -917,7 +929,7 @@
       toast(t('noHostsSelected'), 'error');
       return;
     }
-    var group = groupById(groupSelect.value) || groups[0];
+    var group = groupById(hostManagerGroupSelect.value) || groupById(groupSelect.value) || groups[0];
     if (!group) { group = addGroup(null); }
     selectedHosts.forEach(function (host) {
       connectTerminal(sshConfigHostFormData(host, group.id));
@@ -967,7 +979,11 @@
         event.stopPropagation();
         updateSshConfigHostSelection(host.alias, event, !selectedSshConfigHosts[host.alias]);
       });
-      fillBtn.addEventListener('click', function () { fillFromSshConfigHost(host); });
+      fillBtn.addEventListener('click', function () {
+        fillFromSshConfigHost(host);
+        closeHostManager();
+        $('#hostname').focus();
+      });
       openBtn.addEventListener('click', function () { openSshConfigHost(host); });
       row.addEventListener('click', function (event) {
         if (event.target.closest('button') || event.target.closest('.ssh-host-check')) { return; }
@@ -985,12 +1001,6 @@
       sshConfigList.appendChild(row);
     });
     updateSshConfigSelectionControls(false);
-  }
-
-  function updateSshConfigCollapse() {
-    var panel = document.querySelector('.ssh-config-panel');
-    panel.classList.toggle('is-collapsed', sshConfigCollapsed);
-    toggleSshConfigButton.textContent = sshConfigCollapsed ? t('expandHosts') : t('collapseHosts');
   }
 
   function loadSshConfigHosts() {
@@ -1017,6 +1027,66 @@
         sshConfigHosts = [];
         renderSshConfigHosts(t('hostLoadFailed'));
       });
+  }
+
+  function renderHostManagerTerminals() {
+    hostManagerOpenList.innerHTML = '';
+    var group = groupById(hostManagerGroupSelect.value) || groupById(groupSelect.value) || groups[0];
+    var records = group ? terminalsInGroup(group.id) : [];
+    hostManagerOpenCount.textContent = terminalCountText(records.length);
+    if (!records.length) {
+      hostManagerOpenList.appendChild(el('div', { class: 'ssh-config-empty', text: t('noOpenTerminals') }));
+      return;
+    }
+    records.forEach(function (record) {
+      var state = record.state || 'connecting';
+      hostManagerOpenList.appendChild(el('div', { class: 'host-session is-' + state }, [
+        el('span', { class: 'host-session-dot', 'aria-hidden': 'true' }),
+        el('div', {}, [
+          el('div', { class: 'host-session-name', text: record.displayName || record.hostname }),
+          el('div', {
+            class: 'host-session-meta',
+            text: record.username + '@' + record.hostname + ':' + record.port + ' · ' + record.stateText.textContent
+          })
+        ])
+      ]));
+    });
+  }
+
+  function openHostManager() {
+    hostManagerPreviousFocus = document.activeElement;
+    logOverlay.classList.remove('is-open');
+    if (groupById(groupSelect.value)) { hostManagerGroupSelect.value = groupSelect.value; }
+    hostManagerOverlay.classList.add('is-open');
+    hostManagerOverlay.setAttribute('aria-hidden', 'false');
+    renderHostManagerTerminals();
+    window.setTimeout(function () { hostManagerGroupSelect.focus(); }, 0);
+  }
+
+  function closeHostManager(restoreFocus) {
+    if (!hostManagerOverlay.classList.contains('is-open')) { return; }
+    hostManagerOverlay.classList.remove('is-open');
+    hostManagerOverlay.setAttribute('aria-hidden', 'true');
+    if (restoreFocus !== false && hostManagerPreviousFocus && document.contains(hostManagerPreviousFocus)) {
+      hostManagerPreviousFocus.focus();
+    }
+    hostManagerPreviousFocus = null;
+  }
+
+  function trapHostManagerFocus(event) {
+    var focusable = Array.prototype.slice.call(hostManagerOverlay.querySelectorAll(
+      'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ));
+    if (!focusable.length) { return; }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function groupById(id) {
@@ -1047,14 +1117,24 @@
   // ---- Rendering ---------------------------------------------------------
   function refreshGroupSelect() {
     var current = groupSelect.value;
+    var managerCurrent = hostManagerGroupSelect.value || current;
     groupSelect.innerHTML = '';
+    hostManagerGroupSelect.innerHTML = '';
     groups.forEach(function (group) {
-      var opt = el('option', { value: group.id, text: group.name });
-      groupSelect.appendChild(opt);
+      groupSelect.appendChild(el('option', { value: group.id, text: group.name }));
+      hostManagerGroupSelect.appendChild(el('option', { value: group.id, text: group.name }));
     });
     if (groupById(current)) {
       groupSelect.value = current;
+    } else if (groups[0]) {
+      groupSelect.value = groups[0].id;
     }
+    if (groupById(managerCurrent)) {
+      hostManagerGroupSelect.value = managerCurrent;
+    } else {
+      hostManagerGroupSelect.value = groupSelect.value;
+    }
+    renderHostManagerTerminals();
   }
 
   function updateEmptyState(groupId) {
@@ -1086,33 +1166,27 @@
     var column = board.querySelector('.group[data-group="' + groupId + '"]');
     if (!column || appShell.classList.contains('group-fullscreen')) { return; }
     if (column.classList.contains('is-floating')) { return; }
-    var cols = Number(column.dataset.colSpan) || defaultGroupColSpan();
-    var rows = Number(column.dataset.rowSpan) || defaultGroupRowSpan();
+    var index = groups.findIndex(function (group) { return group.id === groupId; });
+    var cols = column.dataset.manualSize === 'true'
+      ? Number(column.dataset.colSpan) || defaultGroupColSpan()
+      : defaultGroupColSpanForIndex(Math.max(0, index), groups.length);
+    var rows = defaultGroupRowSpanForIndex(Math.max(0, index), groups.length);
     setGroupGridSpan(column, cols, rows);
   }
 
   function defaultGroupColSpan() {
-    return 4;
+    return 1;
   }
 
   function defaultGroupColSpanForIndex(index, total) {
-    var metrics = boardGridMetrics();
     var count = Math.max(1, total || 1);
-    var minCols = 4;
-    if (count <= Math.max(1, Math.floor(metrics.cols / minCols))) {
-      var base = Math.floor(metrics.cols / count);
-      var remainder = metrics.cols % count;
-      return Math.max(minCols, base + (index < remainder ? 1 : 0));
-    }
-    return minCols;
+    return count === 1 ? 2 : 1;
   }
 
-  function defaultGroupRowSpan() {
-    return 16;
-  }
-
-  function terminalGroupRowSpan() {
-    return 16;
+  function defaultGroupRowSpanForIndex(index, total) {
+    var count = Math.max(1, total || 1);
+    if (count <= 2) { return 2; }
+    return index % 3 === 0 ? 2 : 1;
   }
 
   function ensureGroupFitsTerminal(groupId) {
@@ -1120,30 +1194,23 @@
     if (!column || column.dataset.manualSize === 'true') { return; }
     var groupIndex = groups.findIndex(function (group) { return group.id === groupId; });
     var cols = defaultGroupColSpanForIndex(Math.max(0, groupIndex), groups.length);
-    var rows = Number(column.dataset.rowSpan) || defaultGroupRowSpan();
-    setGroupGridSpan(column, cols, Math.max(rows, terminalGroupRowSpan()));
+    var rows = defaultGroupRowSpanForIndex(Math.max(0, groupIndex), groups.length);
+    setGroupGridSpan(column, cols, rows);
   }
 
   function boardGridMetrics() {
     var styles = window.getComputedStyle(board);
-    var tracks = styles.gridTemplateColumns.split(' ').filter(function (track) {
-      return parseFloat(track) > 0;
-    });
+    var colSize = parseFloat(styles.gridAutoColumns) || Math.max(1, board.clientWidth / 2);
     return {
-      cols: Math.max(1, tracks.length || 1),
-      colSize: tracks.length ? parseFloat(tracks[0]) : 96,
-      rowSize: parseFloat(styles.gridAutoRows) || 24,
-      columnGap: parseFloat(styles.columnGap) || 0,
-      rowGap: parseFloat(styles.rowGap) || 0
+      colSize: colSize,
+      columnGap: parseFloat(styles.columnGap) || 0
     };
   }
 
   function setGroupGridSpan(column, cols, rows) {
-    var metrics = boardGridMetrics();
-    var requestedCols = Math.max(3, Math.round(cols));
-    var nextCols = Math.max(1, Math.min(metrics.cols, requestedCols));
-    var nextRows = Math.max(7, Math.round(rows));
-    column.dataset.colSpan = String(requestedCols);
+    var nextCols = Math.max(1, Math.min(2, Math.round(cols)));
+    var nextRows = Math.max(1, Math.min(2, Math.round(rows || 1)));
+    column.dataset.colSpan = String(nextCols);
     column.dataset.rowSpan = String(nextRows);
     column.style.gridColumnEnd = 'span ' + nextCols;
     column.style.gridRowEnd = 'span ' + nextRows;
@@ -1162,7 +1229,7 @@
       var column = board.querySelector('.group[data-group="' + group.id + '"]');
       if (!column || column.dataset.manualSize === 'true') { return; }
       var cols = defaultGroupColSpanForIndex(index, groups.length);
-      var rows = Number(column.dataset.rowSpan) || defaultGroupRowSpan();
+      var rows = defaultGroupRowSpanForIndex(index, groups.length);
       setGroupGridSpan(column, cols, rows);
     });
   }
@@ -1195,6 +1262,7 @@
       }
       updateEmptyState(group.id);
     });
+    if (hostManagerOverlay.classList.contains('is-open')) { renderHostManagerTerminals(); }
   }
 
   function toggleGroupFullscreen(groupId, button) {
@@ -1320,7 +1388,7 @@
     var column = el('section', { class: 'group', dataset: { group: group.id }, 'aria-label': group.name }, [
       head, broadcastForm, list, groupResizeHandle
     ]);
-    setGroupGridSpan(column, group.colSpan || defaultGroupColSpan(), group.rowSpan || defaultGroupRowSpan());
+    setGroupGridSpan(column, group.colSpan || defaultGroupColSpan(), group.rowSpan || 1);
     if (group.manualSize) { column.dataset.manualSize = 'true'; }
 
     // Rename interactions.
@@ -2183,17 +2251,14 @@
       event.stopPropagation();
       column.dataset.manualSize = 'true';
       var startX = event.clientX;
-      var startY = event.clientY;
       var metrics = boardGridMetrics();
       var startCols = Number(column.dataset.colSpan) || defaultGroupColSpan();
-      var startRows = Number(column.dataset.rowSpan) || defaultGroupRowSpan();
+      var rows = Number(column.dataset.rowSpan) || 1;
       var colStep = Math.max(1, metrics.colSize + metrics.columnGap);
-      var rowStep = Math.max(1, metrics.rowSize + metrics.rowGap);
       handle.setPointerCapture(event.pointerId);
       function move(ev) {
         var nextCols = startCols + Math.round((ev.clientX - startX) / colStep);
-        var nextRows = startRows + Math.round((ev.clientY - startY) / rowStep);
-        setGroupGridSpan(column, nextCols, nextRows);
+        setGroupGridSpan(column, nextCols, rows);
       }
       function up() {
         handle.removeEventListener('pointermove', move);
@@ -2297,15 +2362,31 @@
     refreshSshConfigSelectionState();
   });
   openSelectedSshConfig.addEventListener('click', openSelectedSshConfigHosts);
-  toggleSshConfigButton.addEventListener('click', function () {
-    sshConfigCollapsed = !sshConfigCollapsed;
-    updateSshConfigCollapse();
+  openHostManagerButton.addEventListener('click', openHostManager);
+  closeHostManagerButton.addEventListener('click', function () { closeHostManager(); });
+  hostManagerOverlay.addEventListener('click', function (event) {
+    if (event.target === hostManagerOverlay) { closeHostManager(); }
+  });
+  hostManagerGroupSelect.addEventListener('change', function () {
+    groupSelect.value = hostManagerGroupSelect.value;
+    renderHostManagerTerminals();
+  });
+  groupSelect.addEventListener('change', function () {
+    hostManagerGroupSelect.value = groupSelect.value;
+    renderHostManagerTerminals();
+  });
+  hostManagerAddGroup.addEventListener('click', function () {
+    var group = addGroup(null);
+    groupSelect.value = group.id;
+    hostManagerGroupSelect.value = group.id;
+    renderHostManagerTerminals();
   });
   openLocalTerminalButton.addEventListener('click', openLocalTerminal);
   privateKeyInput.addEventListener('change', function () {
     privateKeyName.textContent = privateKeyInput.files.length ? privateKeyInput.files[0].name : t('noFileChosen');
   });
   openLogButton.addEventListener('click', function () {
+    closeHostManager(false);
     logOverlay.classList.add('is-open');
   });
   closeLogButton.addEventListener('click', function () {
@@ -2343,12 +2424,8 @@
     applyLanguage();
   });
 
-  $('#toggle-sidebar').addEventListener('click', function () {
-    appShell.classList.toggle('sidebar-collapsed');
-    window.setTimeout(function () {
-      updateAllGroupGridSpans();
-      Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
-    }, 260);
+  $('.sidebar-rail').addEventListener('click', function () {
+    $('#hostname').focus();
   });
 
   window.addEventListener('resize', function () {
@@ -2356,14 +2433,45 @@
     updateAllGroupGridSpans();
   });
 
+  board.addEventListener('wheel', function (event) {
+    if (event.target.closest('.terminal-list') || board.scrollWidth <= board.clientWidth) { return; }
+    var delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) { return; }
+    event.preventDefault();
+    if (boardWheelLocked) { return; }
+    boardWheelLocked = true;
+    board.scrollBy({
+      left: (delta > 0 ? 1 : -1) * board.clientWidth / 2,
+      behavior: 'smooth'
+    });
+    window.setTimeout(function () { boardWheelLocked = false; }, 360);
+  }, { passive: false });
+
   document.addEventListener('keydown', function (event) {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'h') {
+      event.preventDefault();
+      if (hostManagerOverlay.classList.contains('is-open')) {
+        closeHostManager();
+      } else {
+        openHostManager();
+      }
+      return;
+    }
+    if (event.key === 'Tab' && hostManagerOverlay.classList.contains('is-open')) {
+      trapHostManagerFocus(event);
+      return;
+    }
     if (event.key === 'Escape') {
-      if (focusedGroupId) {
-        exitGroupFullscreen();
+      if (hostManagerOverlay.classList.contains('is-open')) {
+        closeHostManager();
         return;
       }
       if (logOverlay.classList.contains('is-open')) {
         logOverlay.classList.remove('is-open');
+        return;
+      }
+      if (focusedGroupId) {
+        exitGroupFullscreen();
         return;
       }
       Object.keys(terminals).forEach(function (id) {
