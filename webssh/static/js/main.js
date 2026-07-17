@@ -37,6 +37,7 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: '跳到终端列表',
       toggleLanguage: '切换语言',
+      openToolbar: '展开工具栏',
       newGroup: '新建分组',
       disconnectAll: '全部断开',
       connectServer: '连接服务器',
@@ -116,6 +117,14 @@
       configNoAuth: '未配置认证',
       loadedHosts: '已识别 {count}。',
       systemSettings: '系统设置',
+      terminalSettings: '终端与连接',
+      keyboardShortcuts: '快捷键',
+      restoreDefaults: '恢复默认',
+      clearShortcut: '清除 {name} 快捷键',
+      shortcutConflict: '该快捷键已分配给 {name}。',
+      shortcutModifierRequired: '快捷键必须包含 Command/Ctrl 或 Alt。',
+      shortcutReset: '快捷键已恢复默认。',
+      notSet: '未设置',
       confirmDisconnect: '断开全部前确认',
       broadcastEnter: '广播命令自动回车',
       terminalFontSize: '终端字号',
@@ -169,6 +178,7 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: 'Skip to terminals',
       toggleLanguage: 'Switch language',
+      openToolbar: 'Expand toolbar',
       newGroup: 'New group',
       disconnectAll: 'Disconnect all',
       connectServer: 'Connect server',
@@ -248,6 +258,14 @@
       configNoAuth: 'no auth configured',
       loadedHosts: 'Found {count}.',
       systemSettings: 'System settings',
+      terminalSettings: 'Terminal and connection',
+      keyboardShortcuts: 'Keyboard shortcuts',
+      restoreDefaults: 'Restore defaults',
+      clearShortcut: 'Clear {name} shortcut',
+      shortcutConflict: 'This shortcut is already assigned to {name}.',
+      shortcutModifierRequired: 'Shortcuts must include Command/Ctrl or Alt.',
+      shortcutReset: 'Keyboard shortcuts restored to defaults.',
+      notSet: 'Not set',
       confirmDisconnect: 'Confirm before disconnect all',
       broadcastEnter: 'Append Enter to broadcasts',
       terminalFontSize: 'Terminal font size',
@@ -309,6 +327,22 @@
     });
   }
 
+  var DEFAULT_SHORTCUTS = {
+    hostManager: 'mod+shift+h',
+    systemSettings: 'mod+shift+,',
+    operationLog: '',
+    localTerminal: '',
+    newGroup: ''
+  };
+
+  var SHORTCUT_ACTIONS = [
+    { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
+    { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
+    { id: 'operationLog', labelKey: 'operationLog', buttonSelector: '#open-log' },
+    { id: 'localTerminal', labelKey: 'localTerminal', buttonSelector: '#open-local-terminal' },
+    { id: 'newGroup', labelKey: 'newGroup', buttonSelector: '#add-group' }
+  ];
+
   // ---- State -------------------------------------------------------------
   var groups = [];          // ordered [{ id, name }]
   var terminals = {};       // id -> terminal record
@@ -324,6 +358,8 @@
   var sshConfigSelectionAnchor = null;
   var groupLayoutObserver = null;
   var hostManagerPreviousFocus = null;
+  var systemSettingsPreviousFocus = null;
+  var hostManagerGroupId = null;
   var boardWheelLocked = false;
 
   // ---- DOM ---------------------------------------------------------------
@@ -344,9 +380,14 @@
   var openSelectedSshConfig = $('#open-selected-ssh-config');
   var openSelectedSshConfigLabel = $('#open-selected-ssh-config-label');
   var openHostManagerButton = $('#open-host-manager');
+  var openSystemSettingsButton = $('#open-system-settings');
+  var closeSystemSettingsButton = $('#close-system-settings');
+  var systemSettingsOverlay = $('#system-settings-overlay');
+  var shortcutSettingsList = $('#shortcut-settings-list');
+  var resetShortcutsButton = $('#reset-shortcuts');
   var closeHostManagerButton = $('#close-host-manager');
   var hostManagerOverlay = $('#host-manager-overlay');
-  var hostManagerGroupSelect = $('#host-manager-group');
+  var hostManagerGroups = $('#host-manager-groups');
   var hostManagerAddGroup = $('#host-manager-add-group');
   var hostManagerOpenList = $('#host-manager-open-list');
   var hostManagerOpenCount = $('#host-manager-open-count');
@@ -419,10 +460,14 @@
       broadcastEnter: true,
       terminalFontSize: 13,
       terminalHeight: 300,
-      maxTerminals: 20
+      maxTerminals: 20,
+      shortcuts: Object.assign({}, DEFAULT_SHORTCUTS)
     };
     try {
-      return Object.assign(defaults, JSON.parse(window.localStorage.getItem('wssh-settings') || '{}'));
+      var saved = JSON.parse(window.localStorage.getItem('wssh-settings') || '{}');
+      var merged = Object.assign({}, defaults, saved);
+      merged.shortcuts = Object.assign({}, DEFAULT_SHORTCUTS, saved.shortcuts || {});
+      return merged;
     } catch (e) {
       return defaults;
     }
@@ -468,6 +513,152 @@
     fontSizeInput.value = settings.terminalFontSize;
     terminalHeightInput.value = settings.terminalHeight;
     maxTerminalsInput.value = settings.maxTerminals;
+    renderShortcutSettings();
+    applyShortcutBindings();
+  }
+
+  function shortcutKeyFromEvent(event) {
+    if (/^Key[A-Z]$/.test(event.code)) { return event.code.slice(3).toLowerCase(); }
+    if (/^Digit[0-9]$/.test(event.code)) { return event.code.slice(5); }
+    var codeMap = {
+      Comma: ',', Period: '.', Slash: '/', Semicolon: ';',
+      BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+      Minus: '-', Equal: '=', Space: 'space', Enter: 'enter',
+      ArrowUp: 'arrowup', ArrowDown: 'arrowdown',
+      ArrowLeft: 'arrowleft', ArrowRight: 'arrowright'
+    };
+    if (codeMap[event.code]) { return codeMap[event.code]; }
+    if (/^F([1-9]|1[0-2])$/.test(event.code)) { return event.code.toLowerCase(); }
+    return null;
+  }
+
+  function shortcutFromEvent(event) {
+    var key = shortcutKeyFromEvent(event);
+    if (!key || !(event.ctrlKey || event.metaKey || event.altKey)) { return null; }
+    var parts = [];
+    if (event.ctrlKey || event.metaKey) { parts.push('mod'); }
+    if (event.altKey) { parts.push('alt'); }
+    if (event.shiftKey) { parts.push('shift'); }
+    parts.push(key);
+    return parts.join('+');
+  }
+
+  function shortcutLabel(shortcut) {
+    if (!shortcut) { return t('notSet'); }
+    var mac = /Mac|iPhone|iPad|iPod/.test(window.navigator.platform || '');
+    var labels = {
+      mod: mac ? 'Command' : 'Ctrl', alt: mac ? 'Option' : 'Alt', shift: 'Shift',
+      space: 'Space', enter: 'Enter', arrowup: 'Up', arrowdown: 'Down',
+      arrowleft: 'Left', arrowright: 'Right'
+    };
+    return shortcut.split('+').map(function (part) {
+      return labels[part] || part.toUpperCase();
+    }).join(' + ');
+  }
+
+  function shortcutToAria(shortcut) {
+    if (!shortcut) { return ''; }
+    var parts = shortcut.split('+');
+    var key = parts.pop();
+    var modifiers = parts.map(function (part) {
+      if (part === 'shift') { return 'Shift'; }
+      if (part === 'alt') { return 'Alt'; }
+      return part;
+    });
+    var ariaKey = {
+      space: 'Space', enter: 'Enter', arrowup: 'ArrowUp', arrowdown: 'ArrowDown',
+      arrowleft: 'ArrowLeft', arrowright: 'ArrowRight'
+    }[key] || key.toUpperCase();
+    if (modifiers.indexOf('mod') === -1) {
+      return modifiers.concat(ariaKey).join('+');
+    }
+    return ['Control', 'Meta'].map(function (mod) {
+      return modifiers.map(function (part) { return part === 'mod' ? mod : part; }).concat(ariaKey).join('+');
+    }).join(' ');
+  }
+
+  function eventMatchesShortcut(event, shortcut) {
+    if (!shortcut) { return false; }
+    var parts = shortcut.split('+');
+    var key = parts.pop();
+    var expectsMod = parts.indexOf('mod') !== -1;
+    var expectsAlt = parts.indexOf('alt') !== -1;
+    var expectsShift = parts.indexOf('shift') !== -1;
+    if (expectsMod !== !!(event.ctrlKey || event.metaKey)) { return false; }
+    if (expectsAlt !== event.altKey || expectsShift !== event.shiftKey) { return false; }
+    return shortcutKeyFromEvent(event) === key;
+  }
+
+  function applyShortcutBindings() {
+    SHORTCUT_ACTIONS.forEach(function (action) {
+      var button = $(action.buttonSelector);
+      if (!button) { return; }
+      var value = shortcutToAria(settings.shortcuts[action.id]);
+      if (value) {
+        button.setAttribute('aria-keyshortcuts', value);
+      } else {
+        button.removeAttribute('aria-keyshortcuts');
+      }
+    });
+  }
+
+  function renderShortcutSettings() {
+    if (!shortcutSettingsList) { return; }
+    shortcutSettingsList.innerHTML = '';
+    SHORTCUT_ACTIONS.forEach(function (action) {
+      var inputId = 'shortcut-' + action.id;
+      var input = el('input', {
+        class: 'shortcut-input', id: inputId, type: 'text', readonly: 'readonly',
+        autocomplete: 'off', value: shortcutLabel(settings.shortcuts[action.id])
+      });
+      var clearLabel = t('clearShortcut', { name: t(action.labelKey) });
+      var clearButton = el('button', {
+        class: 'shortcut-clear', type: 'button', title: clearLabel,
+        'aria-label': clearLabel, html: ICONS.close
+      });
+      clearButton.disabled = !settings.shortcuts[action.id];
+      input.addEventListener('focus', function () { input.select(); });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Tab') { return; }
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === 'Escape') { input.blur(); return; }
+        if ((event.key === 'Backspace' || event.key === 'Delete') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          settings.shortcuts[action.id] = '';
+          saveSettings();
+          applyShortcutBindings();
+          renderShortcutSettings();
+          return;
+        }
+        if (['Control', 'Meta', 'Alt', 'Shift'].indexOf(event.key) !== -1) { return; }
+        var shortcut = shortcutFromEvent(event);
+        if (!shortcut) {
+          toast(t('shortcutModifierRequired'), 'error');
+          return;
+        }
+        var conflict = SHORTCUT_ACTIONS.find(function (item) {
+          return item.id !== action.id && settings.shortcuts[item.id] === shortcut;
+        });
+        if (conflict) {
+          toast(t('shortcutConflict', { name: t(conflict.labelKey) }), 'error');
+          return;
+        }
+        settings.shortcuts[action.id] = shortcut;
+        saveSettings();
+        applyShortcutBindings();
+        input.value = shortcutLabel(shortcut);
+        input.blur();
+      });
+      clearButton.addEventListener('click', function () {
+        settings.shortcuts[action.id] = '';
+        saveSettings();
+        applyShortcutBindings();
+        renderShortcutSettings();
+      });
+      shortcutSettingsList.appendChild(el('div', { class: 'shortcut-row' }, [
+        el('label', { for: inputId, text: t(action.labelKey) }), input, clearButton
+      ]));
+    });
   }
 
   function updateSettingsFromControls() {
@@ -558,6 +749,8 @@
     refreshDynamicLanguage();
     renderSshConfigHosts();
     renderHostManagerTerminals();
+    renderShortcutSettings();
+    applyShortcutBindings();
     renderLog();
     if (!privateKeyInput.files.length) { privateKeyName.textContent = t('noFileChosen'); }
     updateSummary();
@@ -833,7 +1026,7 @@
   }
 
   function openSshConfigHost(host) {
-    var groupId = hostManagerGroupSelect.value || groupSelect.value;
+    var groupId = hostManagerGroupId || groupSelect.value;
     var data = sshConfigHostFormData(host, groupId);
     var errors = validateData(data);
     if (errors.length) {
@@ -929,7 +1122,7 @@
       toast(t('noHostsSelected'), 'error');
       return;
     }
-    var group = groupById(hostManagerGroupSelect.value) || groupById(groupSelect.value) || groups[0];
+    var group = groupById(hostManagerGroupId) || groupById(groupSelect.value) || groups[0];
     if (!group) { group = addGroup(null); }
     selectedHosts.forEach(function (host) {
       connectTerminal(sshConfigHostFormData(host, group.id));
@@ -1031,7 +1224,7 @@
 
   function renderHostManagerTerminals() {
     hostManagerOpenList.innerHTML = '';
-    var group = groupById(hostManagerGroupSelect.value) || groupById(groupSelect.value) || groups[0];
+    var group = groupById(hostManagerGroupId) || groupById(groupSelect.value) || groups[0];
     var records = group ? terminalsInGroup(group.id) : [];
     hostManagerOpenCount.textContent = terminalCountText(records.length);
     if (!records.length) {
@@ -1040,6 +1233,27 @@
     }
     records.forEach(function (record) {
       var state = record.state || 'connecting';
+      var reconnectBtn = el('button', {
+        type: 'button', title: t('reconnectTerminal'),
+        'aria-label': t('reconnectTerminal'), html: ICONS.reconnect
+      });
+      var maximized = record.card.classList.contains('maximized');
+      var maxBtn = el('button', {
+        type: 'button', title: t(maximized ? 'restore' : 'maximize'),
+        'aria-label': t(maximized ? 'restore' : 'maximize'),
+        html: maximized ? ICONS.minimize : ICONS.maximize
+      });
+      var closeBtn = el('button', {
+        class: 'close-btn', type: 'button', title: t('close'),
+        'aria-label': t('closeTerminal'), html: ICONS.close
+      });
+      reconnectBtn.addEventListener('click', function () { reconnectTerminal(record); });
+      maxBtn.addEventListener('click', function () {
+        var cardButton = record.card.querySelector('.terminal-tools button:nth-child(2)');
+        closeHostManager(false);
+        toggleMaximize(record, cardButton);
+      });
+      closeBtn.addEventListener('click', function () { closeTerminal(record.id, t('userClosed')); });
       hostManagerOpenList.appendChild(el('div', { class: 'host-session is-' + state }, [
         el('span', { class: 'host-session-dot', 'aria-hidden': 'true' }),
         el('div', {}, [
@@ -1048,19 +1262,74 @@
             class: 'host-session-meta',
             text: record.username + '@' + record.hostname + ':' + record.port + ' · ' + record.stateText.textContent
           })
-        ])
+        ]),
+        el('div', { class: 'terminal-tools host-session-tools' }, [reconnectBtn, maxBtn, closeBtn])
       ]));
     });
   }
 
+  function renderHostManagerGroups() {
+    hostManagerGroups.innerHTML = '';
+    var selected = groupById(hostManagerGroupId) || groupById(groupSelect.value) || groups[0];
+    hostManagerGroupId = selected ? selected.id : null;
+    groups.forEach(function (group, index) {
+      var active = group.id === hostManagerGroupId;
+      var tab = el('button', {
+        class: 'host-manager-group-tab', type: 'button',
+        dataset: { group: group.id }, 'aria-pressed': active ? 'true' : 'false',
+        tabindex: active ? '0' : '-1', title: group.name, text: group.name
+      });
+      var deleteLabel = t('removeGroup') + ': ' + group.name;
+      var deleteBtn = el('button', {
+        class: 'host-manager-group-delete', type: 'button',
+        title: deleteLabel, 'aria-label': deleteLabel, html: ICONS.trash
+      });
+      deleteBtn.disabled = groups.length <= 1;
+      tab.addEventListener('click', function () { selectHostManagerGroup(group.id); });
+      tab.addEventListener('keydown', function (event) {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') { return; }
+        event.preventDefault();
+        var offset = event.key === 'ArrowRight' ? 1 : -1;
+        var next = groups[(index + offset + groups.length) % groups.length];
+        selectHostManagerGroup(next.id, true);
+      });
+      deleteBtn.addEventListener('click', function () {
+        removeGroup(group.id);
+        focusHostManagerGroup();
+      });
+      hostManagerGroups.appendChild(el('div', {
+        class: 'host-manager-group-item' + (active ? ' is-active' : '')
+      }, [tab, deleteBtn]));
+    });
+  }
+
+  function selectHostManagerGroup(groupId, focus) {
+    if (!groupById(groupId)) { return; }
+    hostManagerGroupId = groupId;
+    groupSelect.value = groupId;
+    renderHostManagerGroups();
+    renderHostManagerTerminals();
+    if (focus) { focusHostManagerGroup(); }
+  }
+
+  function focusHostManagerGroup() {
+    var tab = hostManagerGroups.querySelector('.host-manager-group-tab[aria-pressed="true"]');
+    if (tab) {
+      tab.focus();
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+
   function openHostManager() {
-    hostManagerPreviousFocus = document.activeElement;
+    hostManagerPreviousFocus = modalReturnFocus(openHostManagerButton);
+    closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
-    if (groupById(groupSelect.value)) { hostManagerGroupSelect.value = groupSelect.value; }
+    if (groupById(groupSelect.value)) { hostManagerGroupId = groupSelect.value; }
     hostManagerOverlay.classList.add('is-open');
     hostManagerOverlay.setAttribute('aria-hidden', 'false');
+    renderHostManagerGroups();
     renderHostManagerTerminals();
-    window.setTimeout(function () { hostManagerGroupSelect.focus(); }, 0);
+    window.setTimeout(focusHostManagerGroup, 0);
   }
 
   function closeHostManager(restoreFocus) {
@@ -1073,10 +1342,38 @@
     hostManagerPreviousFocus = null;
   }
 
-  function trapHostManagerFocus(event) {
-    var focusable = Array.prototype.slice.call(hostManagerOverlay.querySelectorAll(
+  function modalReturnFocus(fallback) {
+    var active = document.activeElement;
+    if (!active || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) || logOverlay.contains(active)) {
+      return fallback;
+    }
+    return active;
+  }
+
+  function openSystemSettings() {
+    systemSettingsPreviousFocus = modalReturnFocus(openSystemSettingsButton);
+    closeHostManager(false);
+    logOverlay.classList.remove('is-open');
+    renderShortcutSettings();
+    systemSettingsOverlay.classList.add('is-open');
+    systemSettingsOverlay.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function () { confirmDisconnectInput.focus(); }, 0);
+  }
+
+  function closeSystemSettings(restoreFocus) {
+    if (!systemSettingsOverlay.classList.contains('is-open')) { return; }
+    systemSettingsOverlay.classList.remove('is-open');
+    systemSettingsOverlay.setAttribute('aria-hidden', 'true');
+    if (restoreFocus !== false && systemSettingsPreviousFocus && document.contains(systemSettingsPreviousFocus)) {
+      systemSettingsPreviousFocus.focus();
+    }
+    systemSettingsPreviousFocus = null;
+  }
+
+  function trapModalFocus(overlay, event) {
+    var focusable = Array.prototype.slice.call(overlay.querySelectorAll(
       'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    ));
+    )).filter(function (node) { return node.tabIndex >= 0; });
     if (!focusable.length) { return; }
     var first = focusable[0];
     var last = focusable[focusable.length - 1];
@@ -1117,12 +1414,10 @@
   // ---- Rendering ---------------------------------------------------------
   function refreshGroupSelect() {
     var current = groupSelect.value;
-    var managerCurrent = hostManagerGroupSelect.value || current;
+    var managerCurrent = hostManagerGroupId || current;
     groupSelect.innerHTML = '';
-    hostManagerGroupSelect.innerHTML = '';
     groups.forEach(function (group) {
       groupSelect.appendChild(el('option', { value: group.id, text: group.name }));
-      hostManagerGroupSelect.appendChild(el('option', { value: group.id, text: group.name }));
     });
     if (groupById(current)) {
       groupSelect.value = current;
@@ -1130,10 +1425,11 @@
       groupSelect.value = groups[0].id;
     }
     if (groupById(managerCurrent)) {
-      hostManagerGroupSelect.value = managerCurrent;
+      hostManagerGroupId = managerCurrent;
     } else {
-      hostManagerGroupSelect.value = groupSelect.value;
+      hostManagerGroupId = groupSelect.value;
     }
+    renderHostManagerGroups();
     renderHostManagerTerminals();
   }
 
@@ -2349,6 +2645,39 @@
     connectTerminal(data);
   });
 
+  function openLogOverlay() {
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.add('is-open');
+  }
+
+  function shortcutActionForEvent(event) {
+    if (event.repeat) { return null; }
+    return SHORTCUT_ACTIONS.find(function (action) {
+      return eventMatchesShortcut(event, settings.shortcuts[action.id]);
+    }) || null;
+  }
+
+  function runShortcutAction(actionId) {
+    if (actionId === 'hostManager') {
+      if (hostManagerOverlay.classList.contains('is-open')) { closeHostManager(); } else { openHostManager(); }
+      return;
+    }
+    if (actionId === 'systemSettings') {
+      if (systemSettingsOverlay.classList.contains('is-open')) { closeSystemSettings(); } else { openSystemSettings(); }
+      return;
+    }
+    if (actionId === 'operationLog') {
+      if (logOverlay.classList.contains('is-open')) { logOverlay.classList.remove('is-open'); } else { openLogOverlay(); }
+      return;
+    }
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    if (actionId === 'localTerminal') { openLocalTerminal(); }
+    if (actionId === 'newGroup') { addGroup(null, { focus: true }); }
+  }
+
   // ---- Top bar actions ---------------------------------------------------
   $('#add-group').addEventListener('click', function () { addGroup(null, { focus: true }); });
 
@@ -2363,32 +2692,33 @@
   });
   openSelectedSshConfig.addEventListener('click', openSelectedSshConfigHosts);
   openHostManagerButton.addEventListener('click', openHostManager);
+  openSystemSettingsButton.addEventListener('click', openSystemSettings);
+  closeSystemSettingsButton.addEventListener('click', function () { closeSystemSettings(); });
+  systemSettingsOverlay.addEventListener('click', function (event) {
+    if (event.target === systemSettingsOverlay) { closeSystemSettings(); }
+  });
   closeHostManagerButton.addEventListener('click', function () { closeHostManager(); });
   hostManagerOverlay.addEventListener('click', function (event) {
     if (event.target === hostManagerOverlay) { closeHostManager(); }
   });
-  hostManagerGroupSelect.addEventListener('change', function () {
-    groupSelect.value = hostManagerGroupSelect.value;
-    renderHostManagerTerminals();
-  });
   groupSelect.addEventListener('change', function () {
-    hostManagerGroupSelect.value = groupSelect.value;
+    hostManagerGroupId = groupSelect.value;
+    renderHostManagerGroups();
     renderHostManagerTerminals();
   });
   hostManagerAddGroup.addEventListener('click', function () {
     var group = addGroup(null);
     groupSelect.value = group.id;
-    hostManagerGroupSelect.value = group.id;
+    hostManagerGroupId = group.id;
+    renderHostManagerGroups();
     renderHostManagerTerminals();
+    focusHostManagerGroup();
   });
   openLocalTerminalButton.addEventListener('click', openLocalTerminal);
   privateKeyInput.addEventListener('change', function () {
     privateKeyName.textContent = privateKeyInput.files.length ? privateKeyInput.files[0].name : t('noFileChosen');
   });
-  openLogButton.addEventListener('click', function () {
-    closeHostManager(false);
-    logOverlay.classList.add('is-open');
-  });
+  openLogButton.addEventListener('click', openLogOverlay);
   closeLogButton.addEventListener('click', function () {
     logOverlay.classList.remove('is-open');
   });
@@ -2409,6 +2739,13 @@
   [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput].forEach(function (input) {
     input.addEventListener('change', updateSettingsFromControls);
   });
+  resetShortcutsButton.addEventListener('click', function () {
+    settings.shortcuts = Object.assign({}, DEFAULT_SHORTCUTS);
+    saveSettings();
+    applyShortcutBindings();
+    renderShortcutSettings();
+    toast(t('shortcutReset'), 'success');
+  });
 
   function clearLogs() {
     operationLogs = [];
@@ -2426,6 +2763,10 @@
 
   $('.sidebar-rail').addEventListener('click', function () {
     $('#hostname').focus();
+  });
+
+  $('.topbar-rail').addEventListener('click', function () {
+    languageToggle.focus();
   });
 
   window.addEventListener('resize', function () {
@@ -2448,22 +2789,27 @@
   }, { passive: false });
 
   document.addEventListener('keydown', function (event) {
-    if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'h') {
+    var shortcutAction = shortcutActionForEvent(event);
+    if (shortcutAction) {
       event.preventDefault();
-      if (hostManagerOverlay.classList.contains('is-open')) {
-        closeHostManager();
-      } else {
-        openHostManager();
-      }
+      runShortcutAction(shortcutAction.id);
       return;
     }
     if (event.key === 'Tab' && hostManagerOverlay.classList.contains('is-open')) {
-      trapHostManagerFocus(event);
+      trapModalFocus(hostManagerOverlay, event);
+      return;
+    }
+    if (event.key === 'Tab' && systemSettingsOverlay.classList.contains('is-open')) {
+      trapModalFocus(systemSettingsOverlay, event);
       return;
     }
     if (event.key === 'Escape') {
       if (hostManagerOverlay.classList.contains('is-open')) {
         closeHostManager();
+        return;
+      }
+      if (systemSettingsOverlay.classList.contains('is-open')) {
+        closeSystemSettings();
         return;
       }
       if (logOverlay.classList.contains('is-open')) {
