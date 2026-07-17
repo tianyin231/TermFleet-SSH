@@ -12,7 +12,7 @@ description: Navigate, diagnose, review, test, and safely evolve the TermFleet-S
 3. Inspect `git status --short`. Preserve user changes and do not rewrite unrelated files.
 4. For non-trivial or cross-module work, check CodeGraph status and use it to identify symbols, call paths, and likely impact.
 5. Locate and confirm the current implementation with `rg`; treat the project map and graph as navigation aids, not substitutes for source inspection.
-6. State the requested outcome, assumptions, affected contracts, and a verification target before making a substantial change.
+6. State the requested outcome, assumptions, affected contracts, and the acceptance points the user should inspect before making a substantial change.
 
 Keep changes surgical. This repository contains a large, framework-free frontend and a stateful terminal backend; prefer the minimum coherent change over speculative abstraction.
 
@@ -75,32 +75,23 @@ For frontend changes, follow the existing plain JavaScript and DOM-helper style 
 
 For broad redesigns or migrations, establish the replacement boundary and migration sequence before editing. Do not silently maintain two architectures. Record intentional compatibility behavior and remove only code made obsolete by the requested change.
 
-## Verify Proportionally
+## Hand Off for User Acceptance
 
-Run the narrowest relevant checks first, then broaden:
+After implementation, summarize the changed behavior, affected files, known limitations, and how the user can exercise the result. The user owns product acceptance. Do not run functional acceptance checks or claim that the result is accepted unless the user explicitly asks for those checks.
 
-```bash
-node --check webssh/static/js/main.js
-.venv/bin/python -m unittest discover tests
-```
+Leave the implementation uncommitted and unpushed while acceptance is pending. Wait for an explicit user instruction such as "验收通过" or "可以推送" before publishing it. A request to inspect, explain, or revise the result is not approval to commit or push.
 
-Use `python -m pytest tests` only when pytest is installed. For frontend behavior, start the app and exercise affected workflows in a real browser; verify desktop and mobile layouts when UI is changed. For session work, test SSH creation, local-terminal creation, terminal I/O, resize, manual close, unexpected WebSocket loss, and refresh restoration as applicable.
+## Publish Accepted Updates with Git
 
-Use `codegraph affected` to suggest focused tests, then verify that selection with `rg` and the test tree. Do not claim the suite is green when only syntax, graph analysis, or legacy backend tests passed. Read the coverage gaps in `references/project-map.md` and report untested behavior explicitly.
-
-## Finish Major Updates with Git
-
-Treat a change as major when the user calls it a major update, or when it changes multiple modules, shared contracts, session/security behavior, persistence schemas, deployment, or a substantial user workflow or interface.
-
-After completing a major update:
+After the user explicitly accepts the update:
 
 1. Re-read `git status`, the complete task diff, and the configured branch/upstream. Update this skill and the project map when required, then run `codegraph sync .` for source changes.
-2. Run all change-relevant focused checks and the broadest practical regression checks. Continue only when the new behavior is verified and any remaining failures are reproduced as unchanged baseline failures and reported clearly.
-3. Stage only files that belong to the requested update. Never include unrelated user changes, local IDE files, generated CodeGraph data, secrets, or incidental artifacts.
-4. Inspect `git diff --cached` and confirm every staged line traces to the task. Create one focused, non-interactive commit with a message that describes the delivered outcome.
+2. Stage only files that belong to the accepted update. Never include unrelated user changes, local IDE files, generated CodeGraph data, secrets, or incidental artifacts.
+3. Inspect `git diff --cached` and confirm every staged line traces to the accepted task.
+4. Create one focused, non-interactive commit whose subject starts with a change-type prefix. Use `fix:` for defect corrections, `add:` for new capabilities, `doc:` for documentation-only updates, or another accurate prefix such as `refactor:`, `test:`, or `chore:` when applicable.
 5. Push the current branch with ordinary `git push` to its already configured upstream. Verify the resulting branch/upstream state and report the commit and push destination.
 
-Never force-push, push tags, change remotes, create a new upstream, or push to the repository named `upstream` unless the user explicitly requests that exact action. If verification is not sufficient, no upstream is configured, the remote rejects the push, or authentication fails, do not work around the condition silently; stop the Git publishing step and report it. A newer user instruction to keep work local or not commit/push overrides this default.
+`git push` itself has no message field; the prefix belongs to the commit subject that will appear in the pushed history. Never force-push, push tags, change remotes, create a new upstream, or push to the repository named `upstream` unless the user explicitly requests that exact action. If no upstream is configured, the remote rejects the push, or authentication fails, do not work around the condition silently; stop the Git publishing step and report it. A newer user instruction to keep work local or not commit/push overrides this default.
 
 ## Keep This Skill Current
 

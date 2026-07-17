@@ -869,13 +869,9 @@
   function updateSshConfigHostSelection(alias, event, requestedState) {
     var index = sshConfigHostIndex(alias);
     var anchorIndex = sshConfigHostIndex(sshConfigSelectionAnchor);
-    var additive = !!(event && (event.ctrlKey || event.metaKey));
     var range = !!(event && event.shiftKey && anchorIndex >= 0 && index >= 0);
 
     if (range) {
-      if (requestedState === undefined && !additive) {
-        selectedSshConfigHosts = Object.create(null);
-      }
       var selectRange = requestedState === undefined ? true : requestedState;
       var start = Math.min(anchorIndex, index);
       var end = Math.max(anchorIndex, index);
@@ -893,15 +889,12 @@
       } else {
         delete selectedSshConfigHosts[alias];
       }
-    } else if (additive) {
+    } else {
       if (selectedSshConfigHosts[alias]) {
         delete selectedSshConfigHosts[alias];
       } else {
         selectedSshConfigHosts[alias] = true;
       }
-    } else {
-      selectedSshConfigHosts = Object.create(null);
-      selectedSshConfigHosts[alias] = true;
     }
 
     sshConfigSelectionAnchor = alias;
@@ -1874,6 +1867,7 @@
       username: data.get('username'),
       port: data.get('port') || '22',
       group: groupId,
+      displayName: reconnectInfo.sshConfigHost || reconnectInfo.hostname,
       reconnectInfo: safeReconnectInfo(reconnectInfo)
     });
     record.reconnectData = cloneFormData(data);

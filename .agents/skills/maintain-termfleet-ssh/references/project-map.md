@@ -8,7 +8,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 
 - multiple xterm.js terminal cards grouped in resizable, reorderable work groups;
 - SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
-- host discovery from an OpenSSH config file, including server-side identity-file use and checkbox, Ctrl/Command, and Shift multi-select bulk opening;
+- host discovery from an OpenSSH config file, including server-side identity-file use, alias-first terminal titles, click-to-toggle multi-select, Ctrl/Command compatibility, and additive Shift range selection;
 - server-local shell sessions through a PTY;
 - per-group command and control-key broadcast;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
@@ -68,7 +68,7 @@ Worker -> PTYChannel -> server-local shell process
 - `origin` is the TermFleet-SSH repository: `https://github.com/tianyin231/TermFleet-SSH.git` for fetch and push.
 - `upstream` is the original WebSSH repository: `https://github.com/huashengdun/webssh.git` for fetch and push.
 - Normal project publishing uses the current branch's configured upstream, currently `origin/master`. Never push to the remote named `upstream` unless the user explicitly requests it.
-- Major updates are committed and pushed only after relevant verification, scoped staging, and staged-diff review. Never force-push or include unrelated dirty/untracked files.
+- Updates are committed and pushed only after explicit user acceptance, scoped staging, and staged-diff review. Commit subjects use an accurate type prefix such as `fix:`, `add:`, or `doc:`. Never force-push or include unrelated dirty/untracked files.
 
 ## External Contracts
 
