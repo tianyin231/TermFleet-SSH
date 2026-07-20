@@ -24,7 +24,7 @@ from webssh.utils import (
     is_valid_encoding
 )
 from webssh.worker import (
-    Worker, PTYChannel, LocalProcess, recycle_worker, clients
+    Worker, PTYChannel, LocalProcess, register_worker, clients
 )
 
 try:
@@ -418,8 +418,7 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
 
     def post(self):
         ip, port = self.get_client_addr()
-        workers = clients.get(ip, {})
-        if workers and len(workers) >= options.maxconn:
+        if len(clients.get(ip, {})) >= options.maxconn:
             raise tornado.web.HTTPError(403, 'Too many live connections.')
 
         master, slave = pty.openpty()
@@ -437,11 +436,8 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
         )
         worker.enable_directory_tracking(os.path.basename(shell))
         worker.encoding = 'utf-8'
-        if not workers:
-            clients[ip] = workers
-        worker.src_addr = (ip, port)
-        workers[worker.id] = worker
-        self.loop.call_later(options.delay, recycle_worker, worker)
+        register_worker(worker, clients, (ip, port))
+        worker.schedule_recycle(options.delay)
         self.result.update(id=worker.id)
         self.write(self.result)
 
@@ -694,8 +690,7 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             raise ValueError('Uncaught exception')
 
         ip, port = self.get_client_addr()
-        workers = clients.get(ip, {})
-        if workers and len(workers) >= options.maxconn:
+        if len(clients.get(ip, {})) >= options.maxconn:
             raise tornado.web.HTTPError(403, 'Too many live connections.')
 
         self.check_origin()
@@ -713,11 +708,13 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             logging.error(traceback.format_exc())
             self.result.update(status=str(exc))
         else:
-            if not workers:
-                clients[ip] = workers
-            worker.src_addr = (ip, port)
-            workers[worker.id] = worker
-            self.loop.call_later(options.delay, recycle_worker, worker)
+            workers = register_worker(worker, clients, (ip, port))
+            if len(workers) > options.maxconn:
+                worker.close(reason='connection limit exceeded')
+                raise tornado.web.HTTPError(
+                    403, 'Too many live connections.'
+                )
+            worker.schedule_recycle(options.delay)
             self.result.update(id=worker.id, encoding=worker.encoding)
 
         self.write(self.result)
@@ -922,4 +919,4 @@ class WsockHandler(MixinHandler, tornado.websocket.WebSocketHandler):
                 worker.close(reason=self.close_reason)
             else:
                 worker.detach_handler(self)
-                self.loop.call_later(max(options.delay, 30), recycle_worker, worker)
+                worker.schedule_recycle(max(options.delay, 30))

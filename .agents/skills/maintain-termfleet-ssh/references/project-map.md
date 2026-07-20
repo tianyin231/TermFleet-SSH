@@ -57,6 +57,7 @@ Worker -> PTYChannel -> server-local shell process
 | `tests/sshserver.py` | In-process Paramiko SSH test server |
 | `tests/test_app.py` | Main HTTP, SSH-authentication, WebSocket, policy, origin, size, and encoding integration coverage |
 | `tests/test_handler.py` | Handler helpers, private keys, origin/client address, SSH config, WebSocket edge cases |
+| `tests/test_worker.py` | Worker registry identity, idempotent cleanup, close failures, and generation-guarded recycle behavior |
 | `tests/test_settings.py`, `test_policy.py`, `test_utils.py`, `test_main.py` | Focused backend unit coverage |
 
 ## Repository Tooling
@@ -109,15 +110,15 @@ Server terminal output is sent as binary frames. A newly bound socket replaces a
 ## Session Lifecycle
 
 1. The browser posts SSH credentials to `/` or requests `/local-terminal`.
-2. The backend creates a `Worker`, detects encoding and supported shell type through one existing exec channel, installs directory tracking in the interactive PTY when supported, stores the Worker in `clients[client_ip][worker_id]`, and schedules early recycling if no WebSocket binds.
-3. The browser opens `/ws?id=<worker_id>`. The worker binds the handler and registers its channel fd with Tornado's IOLoop.
+2. The backend creates a `Worker`, detects encoding and supported shell type through one existing exec channel, installs directory tracking in the interactive PTY when supported, registers the Worker in the canonical `clients[client_ip]` map after asynchronous setup, rechecks `maxconn`, and schedules an owned early-recycle timeout if no WebSocket binds.
+3. The browser opens `/ws?id=<worker_id>`. The worker cancels its pending recycle timeout, binds the handler, and registers its channel fd with Tornado's IOLoop.
 4. The browser sends JSON input/resize/ping; the worker sends binary terminal output.
-5. A manual WebSocket close reason closes the worker, channel, SSH/local process, and registry entry.
-6. An incidental disconnect detaches the handler and schedules recycling after `max(options.delay, 30)` seconds.
+5. A manual WebSocket close reason cancels recycling and closes the worker, channel, SSH/local process, and identity-matched registry entry; transport close errors do not skip the remaining cleanup.
+6. An incidental disconnect detaches the handler and replaces any older recycle timeout with a generation-guarded timeout after `max(options.delay, 30)` seconds.
 7. On page load, the browser intersects saved `wssh-sessions` with `/active-workers`, recreates cards, and rebinds surviving workers.
 8. The browser then fills any missing cards from pinned snapshots in `wssh-groups`. Local terminals and SSH descriptors that require no stored secret create new workers automatically; other SSH cards stop in an authentication-required state.
 
-Recycle callbacks are not tracked or canceled. A callback returns while a handler is attached, but a callback from an older detach can close a worker during a newer detached interval. Do not extend restoration by merely increasing `options.delay`: that option also controls recycling of newly created workers that never bind, and stale callbacks still exist.
+Each Worker tracks one recycle timeout. Cancellation advances its generation so even an already-queued stale callback cannot close a later binding or detached interval. Concurrent SSH completions always register into the current canonical per-IP map, and a post-connect `maxconn` check closes only the excess Worker without replacing existing registry entries.
 
 Worker rebinding is short-lived, per process, and keyed by client IP; the workers themselves do not survive a server restart. Pinned groups add a separate browser-local, declarative restore path that creates replacement workers after restart when no saved secret is needed. A reconnect creates a new backend worker, and saved reconnect metadata excludes credentials and private-key data, so password, TOTP, uploaded-key, and passphrase sessions require re-authentication.
 
@@ -160,14 +161,14 @@ node --check webssh/static/js/main.js
 .venv/bin/python -m unittest discover tests
 ```
 
-On 2026-07-17, JS syntax passed. The local `.venv` used Python 3.9 even though the project requires Python 3.10+, and it did not contain pytest. Its unittest baseline ran 94 tests with 1 failure and 2 errors: the wrong-port case returned Paramiko `No existing session`, and both oversized-request tests raised client-side `BrokenPipeError`. A clean Python 3.13 environment with the pinned requirements reproduced the same three failures unchanged. Update this note when the baseline changes; do not attribute these failures to later work without reproducing them before the change.
+On 2026-07-20, JS syntax passed. The local `.venv` used Python 3.9 even though the project requires Python 3.10+, and it did not contain pytest. Its unittest baseline ran 102 tests with 1 failure and 2 errors: the wrong-port case returned Paramiko `No existing session`, and the two oversized-request tests raised client-side `ConnectionResetError` or `BrokenPipeError`. A clean Python 3.13 environment with the pinned requirements previously reproduced the same three failures. Update this note when the baseline changes; do not attribute these failures to later work without reproducing them before the change.
 
 Coverage is strongest for inherited SSH authentication, request validation, policies, origins, encoding, and basic WebSocket I/O. Coverage is weak or absent for:
 
 - `/ssh-config`, `/system-settings`, `/active-workers`, `/local-terminal`, and `/upload` end-to-end behavior;
 - local-process cleanup and PTY lifecycle;
 - full refresh restoration and worker rebinding;
-- recycle-timer cancellation, stale callbacks, and repeated detach/rebind sequences;
+- repeated real-browser detach/rebind sequences beyond the generation-guard unit coverage;
 - client persistence schema and migrations;
 - group/card drag, resize, fullscreen, reconnect, broadcast, latency, i18n, logs, and responsive layout;
 - authorization implications of local shells and global settings;

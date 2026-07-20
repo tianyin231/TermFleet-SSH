@@ -18,6 +18,11 @@ from webssh.utils import to_str
 from webssh.worker import clients
 
 try:
+    from unittest.mock import patch
+except ImportError:
+    from mock import patch
+
+try:
     from urllib.parse import urlencode
 except ImportError:
     from urllib import urlencode
@@ -178,6 +183,33 @@ class TestAppBasic(TestAppBase):
     def test_app_with_correct_credentials(self):
         response = self.sync_post('/', self.body)
         self.assert_status_none(json.loads(to_str(response.body)))
+
+    @tornado.testing.gen_test
+    def test_concurrent_connections_share_worker_registry(self):
+        clients.clear()
+        barrier = threading.Barrier(3)
+        original_connect = handler.IndexHandler.ssh_connect
+
+        def synchronized_connect(index_handler, args):
+            barrier.wait(timeout=5)
+            return original_connect(index_handler, args)
+
+        url = self.get_url('/')
+        with patch.object(
+                handler.IndexHandler, 'ssh_connect', synchronized_connect):
+            responses = yield [
+                self.async_post(url, self.body) for _ in range(3)
+            ]
+
+        data = [json.loads(to_str(response.body)) for response in responses]
+        worker_ids = {item['id'] for item in data}
+        workers = clients.get('127.0.0.1', {})
+        try:
+            self.assertNotIn(None, worker_ids)
+            self.assertEqual(worker_ids, set(workers))
+        finally:
+            for worker_ in list(workers.values()):
+                worker_.close(reason='test cleanup')
 
     def test_app_with_correct_credentials_but_with_no_port(self):
         default_port = handler.DEFAULT_PORT
@@ -734,6 +766,37 @@ class TestAppWithTooManyConnections(OtherTestBase):
         clients['127.0.0.1'].clear()
         response = yield self.async_post(url, self.body)
         self.assert_status_none(json.loads(to_str(response.body)))
+
+    @tornado.testing.gen_test
+    def test_concurrent_connections_enforce_maxconn(self):
+        barrier = threading.Barrier(2)
+        original_connect = handler.IndexHandler.ssh_connect
+
+        def synchronized_connect(index_handler, args):
+            barrier.wait(timeout=5)
+            return original_connect(index_handler, args)
+
+        url = self.get_url('/')
+        with patch.object(
+                handler.IndexHandler, 'ssh_connect', synchronized_connect):
+            responses = yield [
+                self.async_post(url, self.body) for _ in range(2)
+            ]
+
+        data = [json.loads(to_str(response.body)) for response in responses]
+        successful = [item for item in data if item['id']]
+        rejected = [
+            item for item in data
+            if item['status'] == 'Too many live connections.'
+        ]
+        workers = clients.get('127.0.0.1', {})
+        try:
+            self.assertEqual(len(successful), 1)
+            self.assertEqual(len(rejected), 1)
+            self.assertEqual(set(workers), {successful[0]['id']})
+        finally:
+            for worker_ in list(workers.values()):
+                worker_.close(reason='test cleanup')
 
 
 class TestAppWithCrossOriginOperation(OtherTestBase):

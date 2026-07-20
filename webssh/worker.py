@@ -40,20 +40,33 @@ SHELL_DIRECTORY_COMMANDS = {
 SHELL_DIRECTORY_READY = b'\x1b]1337;TermFleetShellReady\x07'
 
 
+def register_worker(worker, clients, src_addr):
+    ip = src_addr[0]
+    workers = clients.setdefault(ip, {})
+    worker.src_addr = src_addr
+    workers[worker.id] = worker
+    return workers
+
+
 def clear_worker(worker, clients):
     ip = worker.src_addr[0]
     workers = clients.get(ip)
-    assert worker.id in workers
-    workers.pop(worker.id)
+    if not workers or workers.get(worker.id) is not worker:
+        return False
 
-    if not workers:
-        clients.pop(ip)
-        if not clients:
-            clients.clear()
+    workers.pop(worker.id, None)
+
+    if not workers and clients.get(ip) is workers:
+        clients.pop(ip, None)
+    return True
 
 
-def recycle_worker(worker):
-    if worker.handler:
+def recycle_worker(worker, generation=None):
+    if (generation is not None and
+            generation != worker.recycle_generation):
+        return
+    worker.recycle_handle = None
+    if worker.closed or worker.handler:
         return
     logging.warning('Recycling worker {}'.format(worker.id))
     worker.close(reason='worker recycled')
@@ -69,6 +82,8 @@ class Worker(object):
         self.id = self.gen_id()
         self.data_to_dst = []
         self.handler = None
+        self.recycle_handle = None
+        self.recycle_generation = 0
         self.mode = IOLoop.READ
         self.closed = False
         self.current_directory = None
@@ -88,9 +103,25 @@ class Worker(object):
         return secrets.token_urlsafe(nbytes=32) if secrets else uuid4().hex
 
     def set_handler(self, handler):
+        self.cancel_recycle()
         self.handler = handler
         if self.startup_input:
             self.loop.call_later(2, self.flush_startup_output)
+
+    def cancel_recycle(self):
+        self.recycle_generation += 1
+        handle = self.recycle_handle
+        self.recycle_handle = None
+        if handle is not None:
+            self.loop.remove_timeout(handle)
+
+    def schedule_recycle(self, delay):
+        self.cancel_recycle()
+        generation = self.recycle_generation
+        self.recycle_handle = self.loop.call_later(
+            delay, recycle_worker, self, generation
+        )
+        return self.recycle_handle
 
     def set_current_directory(self, path):
         if isinstance(path, str) and path.startswith('/') and '\x00' not in path and len(path) <= 4096:
@@ -267,6 +298,7 @@ class Worker(object):
         if self.closed:
             return
         self.closed = True
+        self.cancel_recycle()
 
         logging.info(
             'Closing worker {} with reason: {}'.format(self.id, reason)
@@ -274,8 +306,14 @@ class Worker(object):
         if self.handler:
             self.loop.remove_handler(self.fd)
             self.handler.close(reason=reason)
-        self.chan.close()
-        self.ssh.close()
+        for resource in (self.chan, self.ssh):
+            try:
+                resource.close()
+            except Exception:
+                logging.debug(
+                    'Error while closing worker {}'.format(self.id),
+                    exc_info=True
+                )
         logging.info('Connection to {}:{} lost'.format(*self.dst_addr))
 
         clear_worker(self, clients)
