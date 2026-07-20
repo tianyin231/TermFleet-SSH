@@ -1663,10 +1663,90 @@
 
       .broadcast {
         display: grid;
+        position: relative;
+        z-index: 3;
         grid-template-columns: minmax(0, 1fr) 112px 40px auto;
         gap: 8px;
         padding: 10px 12px;
         border-bottom: 1px solid var(--line);
+      }
+
+      .broadcast-input-wrap {
+        position: relative;
+        min-width: 0;
+      }
+
+      .broadcast-input-wrap > input {
+        width: 100%;
+      }
+
+      .broadcast-history {
+        position: absolute;
+        inset: calc(100% + 6px) 0 auto;
+        z-index: 6;
+        max-height: 240px;
+        padding: 4px;
+        overflow-y: auto;
+        background: var(--panel-solid);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow-md);
+        scrollbar-width: thin;
+      }
+
+      .broadcast-history[hidden] {
+        display: none;
+      }
+
+      .broadcast-history.is-portal {
+        position: fixed;
+        inset: auto;
+        z-index: 61;
+      }
+
+      .broadcast-history.is-history-mode {
+        border-color: var(--accent);
+      }
+
+      .broadcast-history-option {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        min-height: 38px;
+        padding: 8px 10px;
+        overflow: hidden;
+        color: var(--ink-soft);
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        font-family: var(--mono);
+        font-size: 12px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: color 160ms ease, background 160ms ease;
+      }
+
+      .broadcast-history-command {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .broadcast-history-source {
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .broadcast-history-option:hover,
+      .broadcast-history-option.is-active {
+        color: var(--ink);
+        background: var(--primary-tint);
       }
 
       .broadcast input,
@@ -2184,6 +2264,10 @@
         .broadcast-upload {
           width: 44px;
           height: 44px;
+        }
+
+        .broadcast-history-option {
+          min-height: 44px;
         }
 
         .settings-dialog {

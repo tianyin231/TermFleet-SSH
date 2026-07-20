@@ -12,7 +12,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - a top-right host manager opened by button or Ctrl/Command+Shift+H, with compact group switching, creation, and quick deletion, SSH-config hosts on the left, current-group terminals plus reconnect/maximize/close controls on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
 - a top-right system-settings modal for terminal and connection preferences plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
-- per-group command and control-key broadcast;
+- per-group command and control-key broadcast with fixed-slot scrolling history above the input, 30+ labeled read-only Linux candidates below it, Tab completion, and seamless Up/Down transitions using the original draft;
 - single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
 - group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, failed-terminal-only batch reconnect, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
@@ -129,6 +129,7 @@ Worker rebinding is short-lived, per process, and keyed by client IP; the worker
 | `wssh-language` | `zh` or `en` |
 | `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, and customizable toolbar shortcut bindings |
 | `wssh-operation-logs` | capped client-side operation log records |
+| `wssh-broadcast-history` | up to 100 deduplicated broadcast commands per group for local candidates and Up/Down navigation; removed with the group |
 | `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, manual-size flag, pin state, and sanitized pinned-terminal snapshots; older layout records reset to the new default spans on restore |
 | `wssh-sessions` | worker ID, stable browser session ID, display metadata, group, height, local flag, last OSC 7 directory, safe auto-reconnect flag, and sanitized reconnect metadata |
 

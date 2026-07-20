@@ -75,6 +75,9 @@
       reauthenticate: '重新认证',
       reauthenticateSession: '重新认证终端',
       reauthenticationReady: '请为 {name} 重新输入认证信息。',
+      broadcastHistory: '广播命令候选',
+      historyCandidate: '历史',
+      commonCandidate: '常用',
       broadcastPlaceholder: '向分组广播命令...',
       broadcastLabel: '向 {name} 广播命令',
       uploadFile: '上传文件',
@@ -252,6 +255,9 @@
       reauthenticate: 'Re-authenticate',
       reauthenticateSession: 'Re-authenticate terminal',
       reauthenticationReady: 'Enter authentication details again for {name}.',
+      broadcastHistory: 'Broadcast command candidates',
+      historyCandidate: 'History',
+      commonCandidate: 'Common',
       broadcastPlaceholder: 'Broadcast command to group...',
       broadcastLabel: 'Broadcast command to {name}',
       uploadFile: 'Upload file',
@@ -415,6 +421,48 @@
     { id: 'newGroup', labelKey: 'newGroup', buttonSelector: '#add-group' }
   ];
 
+  var BROADCAST_HISTORY_LIMIT = 100;
+  var COMMON_BROADCAST_COMMANDS = [
+    'pwd',
+    'ls -la',
+    'ls -lah',
+    'whoami',
+    'id',
+    'w',
+    'hostname',
+    'hostnamectl',
+    'uname -a',
+    'uptime',
+    'date',
+    'cat /etc/os-release',
+    'lscpu',
+    'lsblk',
+    'df -h',
+    'df -ih',
+    'free -h',
+    'vmstat 1 5',
+    'cat /proc/meminfo | head -n 20',
+    'ps aux --sort=-%cpu | head -n 20',
+    'ps aux --sort=-%mem | head -n 20',
+    'last -n 20',
+    'ip addr',
+    'ip -br addr',
+    'ip route',
+    'ip neigh',
+    'ss -tulpn',
+    'ss -lntp',
+    'ss -s',
+    'cat /etc/resolv.conf',
+    'ping -c 4 8.8.8.8',
+    'systemctl --failed --no-pager',
+    'systemctl --type=service --state=running --no-pager',
+    'journalctl -p err -n 50 --no-pager',
+    'journalctl -n 100 --no-pager',
+    'dmesg --level=err,warn | tail -n 50',
+    'docker ps',
+    'docker stats --no-stream'
+  ];
+
   // ---- State -------------------------------------------------------------
   var groups = [];          // ordered [{ id, name }]
   var terminals = {};       // id -> terminal record
@@ -425,6 +473,7 @@
   var columnDrag = null;    // active column drag session
   var focusedGroupId = null;
   var operationLogs = loadLogs();
+  var broadcastHistory = loadBroadcastHistory();
   var settings = loadSettings();
   var selectedSshConfigHosts = Object.create(null);
   var sshConfigSelectionAnchor = null;
@@ -809,6 +858,68 @@
     window.localStorage.setItem('wssh-operation-logs', JSON.stringify(operationLogs));
   }
 
+  function loadBroadcastHistory() {
+    try {
+      var saved = JSON.parse(window.localStorage.getItem('wssh-broadcast-history') || '{}');
+      if (!saved || Array.isArray(saved) || typeof saved !== 'object') { return Object.create(null); }
+      var history = Object.create(null);
+      Object.keys(saved).forEach(function (groupId) {
+        if (!Array.isArray(saved[groupId])) { return; }
+        history[groupId] = saved[groupId].filter(function (command) {
+          return typeof command === 'string' && !!command.trim() && command.length <= 4096;
+        }).slice(0, BROADCAST_HISTORY_LIMIT);
+      });
+      return history;
+    } catch (e) {
+      return Object.create(null);
+    }
+  }
+
+  function saveBroadcastHistory() {
+    window.localStorage.setItem('wssh-broadcast-history', JSON.stringify(broadcastHistory));
+  }
+
+  function rememberBroadcastCommand(groupId, command) {
+    var value = String(command || '').replace(/\s+$/, '');
+    if (!value.trim() || value.length > 4096) { return; }
+    var history = (broadcastHistory[groupId] || []).filter(function (item) { return item !== value; });
+    history.unshift(value);
+    broadcastHistory[groupId] = history.slice(0, BROADCAST_HISTORY_LIMIT);
+    saveBroadcastHistory();
+  }
+
+  function broadcastCommandCandidates(groupId, query, includeCommon) {
+    var needle = String(query || '').trim().toLowerCase();
+    var prefix = [];
+    var contains = [];
+    var seen = Object.create(null);
+    var sources = [{ commands: broadcastHistory[groupId] || [], source: 'history' }];
+    if (includeCommon) {
+      var common = { commands: COMMON_BROADCAST_COMMANDS, source: 'common' };
+      if (needle) { sources.push(common); } else { sources.unshift(common); }
+    }
+    sources.forEach(function (source) {
+      source.commands.forEach(function (command) {
+        if (seen[command]) { return; }
+        seen[command] = true;
+        var candidate = { command: command, source: source.source };
+        var value = command.toLowerCase();
+        if (!needle || value.indexOf(needle) === 0) {
+          prefix.push(candidate);
+        } else if (value.indexOf(needle) !== -1) {
+          contains.push(candidate);
+        }
+      });
+    });
+    return prefix.concat(contains);
+  }
+
+  function removeBroadcastHistory(groupId) {
+    if (!broadcastHistory[groupId]) { return; }
+    delete broadcastHistory[groupId];
+    saveBroadcastHistory();
+  }
+
   function renderLog() {
     operationLog.innerHTML = '';
     if (!operationLogs.length) {
@@ -876,6 +987,7 @@
       var fullscreenBtn = column.querySelector('.group-fullscreen-btn');
       var deleteBtn = column.querySelector('.danger-hover');
       var input = column.querySelector('.broadcast input');
+      var historyList = column.querySelector('.broadcast-history');
       var shortcut = column.querySelector('.broadcast select');
       var upload = column.querySelector('.broadcast-upload');
       var sendText = column.querySelector('.broadcast button span');
@@ -901,6 +1013,7 @@
         input.setAttribute('placeholder', t('broadcastPlaceholder'));
         input.setAttribute('aria-label', t('broadcastLabel', { name: group.name }));
       }
+      if (historyList) { historyList.setAttribute('aria-label', t('broadcastHistory')); }
       if (shortcut) {
         shortcut.setAttribute('title', t('broadcastShortcut'));
         shortcut.setAttribute('aria-label', t('broadcastShortcut'));
@@ -1943,11 +2056,213 @@
     ]);
 
     // Broadcast bar.
+    var historyListId = 'broadcast-history-' + group.id;
     var input = el('input', {
       type: 'text', autocomplete: 'off', spellcheck: 'false',
       placeholder: t('broadcastPlaceholder'),
+      role: 'combobox', 'aria-autocomplete': 'list', 'aria-haspopup': 'listbox',
+      'aria-controls': historyListId, 'aria-expanded': 'false',
       'aria-label': t('broadcastLabel', { name: group.name })
     });
+    var historyList = el('div', {
+      class: 'broadcast-history', id: historyListId, role: 'listbox',
+      'aria-label': t('broadcastHistory'), hidden: true
+    });
+    var inputWrap = el('div', { class: 'broadcast-input-wrap' }, [input, historyList]);
+    var candidateItems = [];
+    var candidateIndex = -1;
+    var historyDraft = '';
+    var shellHistoryMode = false;
+
+    function closeCandidatesOnScroll(event) {
+      if (historyList.contains(event.target)) { return; }
+      closeCandidates(false);
+    }
+
+    function closeCandidatesOnResize() {
+      closeCandidates(false);
+    }
+
+    function positionCandidates() {
+      var rect = input.getBoundingClientRect();
+      var width = Math.min(rect.width, window.innerWidth - 16);
+      var left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      var available = shellHistoryMode ? rect.top - 12 : window.innerHeight - rect.bottom - 12;
+      var popupHeight = Math.max(72, Math.min(240, available));
+      historyList.style.left = left + 'px';
+      historyList.style.width = width + 'px';
+      historyList.style.maxHeight = popupHeight + 'px';
+      historyList.style.height = shellHistoryMode ? popupHeight + 'px' : 'auto';
+      if (shellHistoryMode) {
+        historyList.style.top = 'auto';
+        historyList.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+      } else {
+        historyList.style.top = (rect.bottom + 6) + 'px';
+        historyList.style.bottom = 'auto';
+      }
+    }
+
+    function closeCandidates(restoreDraft) {
+      if (restoreDraft) { input.value = historyDraft; }
+      window.removeEventListener('resize', closeCandidatesOnResize);
+      window.removeEventListener('scroll', closeCandidatesOnScroll, true);
+      historyList.hidden = true;
+      historyList.innerHTML = '';
+      historyList.classList.remove('is-portal', 'is-history-mode');
+      historyList.removeAttribute('style');
+      inputWrap.appendChild(historyList);
+      candidateItems = [];
+      candidateIndex = -1;
+      shellHistoryMode = false;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    }
+
+    function selectCandidate(index) {
+      candidateIndex = index;
+      input.value = candidateItems[index].command;
+      var options = historyList.querySelectorAll('[role="option"]');
+      options.forEach(function (option, optionIndex) {
+        var active = optionIndex === index;
+        option.classList.toggle('is-active', active);
+        option.setAttribute('aria-selected', active ? 'true' : 'false');
+        if (active) {
+          input.setAttribute('aria-activedescendant', option.id);
+          if (shellHistoryMode) {
+            historyList.scrollTop = Math.max(0,
+              option.offsetTop + option.offsetHeight - historyList.clientHeight + 4);
+          } else {
+            option.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      });
+    }
+
+    function acceptCandidate(index) {
+      input.value = candidateItems[index].command;
+      historyDraft = input.value;
+      closeCandidates(false);
+      input.focus();
+    }
+
+    function renderCandidates(query, force, includeCommon, historyMode) {
+      candidateItems = broadcastCommandCandidates(group.id, query, includeCommon);
+      candidateIndex = -1;
+      shellHistoryMode = !!historyMode;
+      if (shellHistoryMode) { candidateItems.reverse(); }
+      historyList.innerHTML = '';
+      input.removeAttribute('aria-activedescendant');
+      if (!candidateItems.length || (!force && !String(query || '').trim())) {
+        closeCandidates(false);
+        return;
+      }
+      var historySpacer = null;
+      if (shellHistoryMode) {
+        historySpacer = el('div', {
+          class: 'broadcast-history-spacer', role: 'presentation', 'aria-hidden': 'true'
+        });
+        historyList.appendChild(historySpacer);
+      }
+      candidateItems.forEach(function (candidate, index) {
+        var option = el('button', {
+          class: 'broadcast-history-option', id: historyListId + '-option-' + index,
+          type: 'button', role: 'option', tabindex: '-1', 'aria-selected': 'false'
+        }, [
+          el('span', { class: 'broadcast-history-command', text: candidate.command }),
+          el('span', {
+            class: 'broadcast-history-source',
+            text: t(candidate.source === 'history' ? 'historyCandidate' : 'commonCandidate')
+          })
+        ]);
+        option.addEventListener('pointerdown', function (event) { event.preventDefault(); });
+        option.addEventListener('click', function () { acceptCandidate(index); });
+        historyList.appendChild(option);
+      });
+      historyList.classList.add('is-portal');
+      historyList.classList.toggle('is-history-mode', shellHistoryMode);
+      document.body.appendChild(historyList);
+      historyList.hidden = false;
+      positionCandidates();
+      if (historySpacer) {
+        var firstOption = historyList.querySelector('[role="option"]');
+        historySpacer.style.height = Math.max(0,
+          historyList.clientHeight - firstOption.offsetHeight - 8) + 'px';
+      }
+      input.setAttribute('aria-expanded', 'true');
+      window.addEventListener('resize', closeCandidatesOnResize);
+      window.addEventListener('scroll', closeCandidatesOnScroll, true);
+    }
+
+    function openHistoryCandidates() {
+      renderCandidates(historyDraft, true, false, true);
+      if (!candidateItems.length && historyDraft.trim()) {
+        renderCandidates('', true, false, true);
+      }
+      if (candidateItems.length) {
+        selectCandidate(candidateItems.length - 1);
+      } else {
+        closeCandidates(true);
+      }
+    }
+
+    function openLowerCandidates() {
+      renderCandidates(historyDraft, true, true, false);
+      if (candidateItems.length) {
+        selectCandidate(0);
+      } else {
+        closeCandidates(true);
+      }
+    }
+
+    input.addEventListener('input', function () {
+      historyDraft = input.value;
+      renderCandidates(input.value, false, true, false);
+    });
+    input.addEventListener('keydown', function (event) {
+      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) { return; }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (historyList.hidden) {
+          historyDraft = input.value;
+          openHistoryCandidates();
+        } else if (candidateItems.length && shellHistoryMode) {
+          selectCandidate(Math.max(0, candidateIndex - 1));
+        } else if (candidateItems.length && candidateIndex > 0) {
+          selectCandidate(candidateIndex - 1);
+        } else {
+          openHistoryCandidates();
+        }
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (historyList.hidden) {
+          historyDraft = input.value;
+          openLowerCandidates();
+        } else if (shellHistoryMode && candidateIndex < candidateItems.length - 1) {
+          selectCandidate(candidateIndex + 1);
+        } else if (shellHistoryMode && candidateIndex === candidateItems.length - 1) {
+          openLowerCandidates();
+        } else if (candidateItems.length) {
+          selectCandidate(Math.min(candidateItems.length - 1, candidateIndex + 1));
+        }
+      } else if (event.key === 'Tab' && input.value.trim()) {
+        if (historyList.hidden) {
+          renderCandidates(input.value, true, true, false);
+        }
+        if (candidateItems.length) {
+          var completionIndex = candidateIndex >= 0 ? candidateIndex : 0;
+          if (candidateItems[completionIndex].command !== input.value) {
+            event.preventDefault();
+            acceptCandidate(completionIndex);
+          } else {
+            closeCandidates(false);
+          }
+        }
+      } else if (event.key === 'Escape' && !historyList.hidden) {
+        event.preventDefault();
+        closeCandidates(true);
+      }
+    });
+    input.addEventListener('blur', function () { closeCandidates(false); });
     var shortcutSelect = el('select', { 'aria-label': t('broadcastShortcut'), title: t('broadcastShortcut') }, [
       el('option', { value: '', text: t('shortcutPlaceholder') }),
       el('option', { value: 'ctrl+c', text: t('ctrlC') }),
@@ -1962,13 +2277,16 @@
       title: t('uploadToGroup'), 'aria-label': t('uploadToGroup'), html: ICONS.upload
     });
     var sendBtn = el('button', { class: 'btn btn-accent btn-sm', type: 'submit', html: ICONS.send + '<span>' + t('send') + '</span>' });
-    var broadcastForm = el('form', { class: 'broadcast' }, [input, shortcutSelect, uploadBtn, sendBtn]);
+    var broadcastForm = el('form', { class: 'broadcast' }, [inputWrap, shortcutSelect, uploadBtn, sendBtn]);
     broadcastForm.addEventListener('submit', function (event) {
       event.preventDefault();
       var value = input.value;
       if (!value.trim()) { return; }
+      rememberBroadcastCommand(group.id, value);
       broadcastToGroup(group.id, value);
+      closeCandidates(false);
       input.value = '';
+      historyDraft = '';
       input.focus();
     });
     shortcutSelect.addEventListener('change', function () {
@@ -2076,6 +2394,7 @@
       toast(t('movedTerminals', { count: terminalCountText(members.length), name: fallback.name }));
     }
     groups = groups.filter(function (g) { return g.id !== groupId; });
+    removeBroadcastHistory(groupId);
     var column = board.querySelector('.group[data-group="' + groupId + '"]');
     if (column) { column.remove(); }
     autoSizeDefaultGroups();
