@@ -230,6 +230,28 @@
         box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.24), var(--shadow-md);
       }
 
+      .app-shell.panels-pinned .topbar {
+        position: relative;
+        inset: auto;
+        flex: 0 0 auto;
+        height: auto;
+        margin-bottom: 14px;
+      }
+
+      .app-shell.panels-pinned .topbar-rail,
+      .app-shell.panels-pinned .sidebar-rail {
+        display: none;
+      }
+
+      .app-shell.panels-pinned .topbar-panel {
+        position: relative;
+        inset: auto;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: none;
+      }
+
       .brand {
         display: flex;
         align-items: center;
@@ -485,6 +507,28 @@
 
       .sidebar:focus-within .sidebar-panel {
         box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.24), var(--shadow-lg);
+      }
+
+      .app-shell.panels-pinned .body {
+        gap: 14px;
+      }
+
+      .app-shell.panels-pinned .sidebar {
+        position: relative;
+        inset: auto;
+        flex: 0 0 340px;
+        width: 340px;
+      }
+
+      .app-shell.panels-pinned .sidebar-panel {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        min-width: 0;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: none;
       }
 
       .sidebar-head {
@@ -2367,6 +2411,24 @@
 
         .app-shell.group-fullscreen .group.is-focused .terminal-list {
           grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .app-shell.panels-pinned .body {
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .app-shell.panels-pinned .sidebar {
+          flex: 0 0 min(340px, 42dvh);
+          width: 100%;
+          min-height: 0;
+        }
+
+        .app-shell.panels-pinned .sidebar-panel {
+          width: 100%;
+          min-width: 0;
         }
       }
 

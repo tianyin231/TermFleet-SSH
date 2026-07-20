@@ -38,6 +38,9 @@
       skipTerminals: '跳到终端列表',
       toggleLanguage: '切换语言',
       openToolbar: '展开工具栏',
+      togglePersistentPanels: '切换顶栏和侧栏固定模式',
+      panelsPinned: '顶栏和侧栏已固定展开。',
+      panelsAutoCollapse: '顶栏和侧栏已恢复自动收缩。',
       newGroup: '新建分组',
       disconnectAll: '全部断开',
       connectServer: '连接服务器',
@@ -218,6 +221,9 @@
       skipTerminals: 'Skip to terminals',
       toggleLanguage: 'Switch language',
       openToolbar: 'Expand toolbar',
+      togglePersistentPanels: 'Toggle persistent toolbar and sidebar',
+      panelsPinned: 'Toolbar and sidebar are now kept expanded.',
+      panelsAutoCollapse: 'Toolbar and sidebar now collapse automatically.',
       newGroup: 'New group',
       disconnectAll: 'Disconnect all',
       connectServer: 'Connect server',
@@ -407,6 +413,7 @@
 
   var DEFAULT_SHORTCUTS = {
     connectServer: 'mod+shift+c',
+    togglePersistentPanels: 'mod+alt+p',
     hostManager: 'mod+shift+h',
     systemSettings: 'mod+shift+,',
     operationLog: '',
@@ -416,6 +423,7 @@
 
   var SHORTCUT_ACTIONS = [
     { id: 'connectServer', labelKey: 'connectServer', buttonSelector: '.sidebar-rail' },
+    { id: 'togglePersistentPanels', labelKey: 'togglePersistentPanels', buttonSelector: '.topbar-rail' },
     { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
     { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
     { id: 'operationLog', labelKey: 'operationLog', buttonSelector: '#open-log' },
@@ -617,6 +625,7 @@
     var defaults = {
       confirmDisconnect: true,
       broadcastEnter: true,
+      panelsPinned: false,
       terminalFontSize: 13,
       terminalHeight: 300,
       maxTerminals: 20,
@@ -635,6 +644,22 @@
 
   function saveSettings() {
     window.localStorage.setItem('wssh-settings', JSON.stringify(settings));
+  }
+
+  function applyPersistentPanelMode() {
+    appShell.classList.toggle('panels-pinned', settings.panelsPinned === true);
+  }
+
+  function togglePersistentPanels() {
+    settings.panelsPinned = settings.panelsPinned !== true;
+    saveSettings();
+    applyPersistentPanelMode();
+    var message = t(settings.panelsPinned ? 'panelsPinned' : 'panelsAutoCollapse');
+    setStatus(message);
+    toast(message, 'success');
+    window.setTimeout(function () {
+      Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
+    }, 240);
   }
 
   function xsrfToken() {
@@ -676,6 +701,7 @@
     terminalHeightInput.value = settings.terminalHeight;
     maxTerminalsInput.value = settings.maxTerminals;
     maxUploadSizeInput.value = settings.maxUploadSize;
+    applyPersistentPanelMode();
     renderShortcutSettings();
     applyShortcutBindings();
   }
@@ -3714,6 +3740,10 @@
   }
 
   function runShortcutAction(actionId) {
+    if (actionId === 'togglePersistentPanels') {
+      togglePersistentPanels();
+      return;
+    }
     if (reauthOverlay.classList.contains('is-open')) { closeReauthentication(false); }
     if (actionId === 'connectServer') {
       if (connectionOverlay.classList.contains('is-open')) { closeConnectionDialog(); } else { openConnectionDialog(); }
