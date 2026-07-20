@@ -385,3 +385,19 @@ class TestIndexHandler(unittest.TestCase):
 
         encoding = IndexHandler.get_default_encoding(handler, ssh)
         self.assertEqual("utf-8", encoding)
+
+    def test_shell_and_encoding(self):
+        handler = Mock(spec=IndexHandler)
+        handler.parse_encoding = lambda data: IndexHandler.parse_encoding(
+            handler, data
+        )
+        ssh = Mock(spec=SSHClient)
+        ssh.exec_command.return_value = (
+            io.BytesIO(), io.BytesIO(initial_bytes=b'\x1e/bin/bash\x1eUTF-8\x1e'),
+            io.BytesIO()
+        )
+
+        encoding = IndexHandler.get_default_encoding(handler, ssh)
+
+        self.assertEqual('UTF-8', encoding)
+        self.assertEqual('bash', handler.default_shell)

@@ -107,7 +107,7 @@ Server terminal output is sent as binary frames. A newly bound socket replaces a
 ## Session Lifecycle
 
 1. The browser posts SSH credentials to `/` or requests `/local-terminal`.
-2. The backend creates a `Worker`, stores it in global `clients[client_ip][worker_id]`, and schedules early recycling if no WebSocket binds.
+2. The backend creates a `Worker`, detects encoding and supported shell type through one existing exec channel, installs directory tracking in the interactive PTY when supported, stores the Worker in `clients[client_ip][worker_id]`, and schedules early recycling if no WebSocket binds.
 3. The browser opens `/ws?id=<worker_id>`. The worker binds the handler and registers its channel fd with Tornado's IOLoop.
 4. The browser sends JSON input/resize/ping; the worker sends binary terminal output.
 5. A manual WebSocket close reason closes the worker, channel, SSH/local process, and registry entry.

@@ -605,9 +605,10 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
 
     def get_default_encoding(self, ssh):
         commands = [
-            '$SHELL -ilc "locale charmap"',
-            '$SHELL -ic "locale charmap"'
+            "$SHELL -ilc 'printf \"\\036%s\\036\" \"$SHELL\"; locale charmap; printf \"\\036\"'",
+            "$SHELL -ic 'printf \"\\036%s\\036\" \"$SHELL\"; locale charmap; printf \"\\036\"'"
         ]
+        self.default_shell = ''
 
         for command in commands:
             try:
@@ -623,26 +624,23 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
                     pass
                 else:
                     logging.debug('{!r} => {!r}'.format(command, data))
+                    first = data.find(b'\x1e')
+                    second = data.find(b'\x1e', first + 1)
+                    third = data.find(b'\x1e', second + 1)
+                    if first >= 0 and second > first and third > second:
+                        shell_path = data[first + 1:second]
+                        shell = shell_path.rsplit(b'/', 1)[-1].decode(
+                            'ascii', 'ignore'
+                        ).lower()
+                        if shell in ('bash', 'zsh', 'fish'):
+                            self.default_shell = shell
+                        data = data[second + 1:third]
                     result = self.parse_encoding(data)
                     if result:
                         return result
 
         logging.warning('Could not detect the default encoding.')
         return 'utf-8'
-
-    def get_default_shell(self, ssh):
-        try:
-            _, stdout, _ = ssh.exec_command(
-                'printf %s "$SHELL"', timeout=1
-            )
-            data = stdout.read(256)
-        except (EOFError, IOError, OSError, paramiko.SSHException, socket.timeout):
-            return ''
-        try:
-            shell = to_str(data.strip(), 'utf-8').rsplit('/', 1)[-1].lower()
-        except UnicodeDecodeError:
-            return ''
-        return shell if shell in ('bash', 'zsh', 'fish') else ''
 
     def ssh_connect(self, args):
         ssh = self.ssh_client
@@ -663,10 +661,10 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         term = self.get_argument('term', u'') or u'xterm'
         chan = ssh.invoke_shell(term=term)
         worker = Worker(self.loop, ssh, chan, dst_addr)
-        worker.enable_directory_tracking(self.get_default_shell(ssh))
+        detected_encoding = self.get_default_encoding(ssh)
+        worker.enable_directory_tracking(self.default_shell)
         chan.setblocking(0)
-        worker.encoding = options.encoding if options.encoding else \
-            self.get_default_encoding(ssh)
+        worker.encoding = options.encoding if options.encoding else detected_encoding
         return worker
 
     def check_origin(self):

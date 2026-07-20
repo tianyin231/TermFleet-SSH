@@ -32,8 +32,8 @@ class Server(paramiko.ServerInterface):
     good_pub_key = paramiko.RSAKey(data=base64.decodebytes(data))
 
     commands = [
-        b'$SHELL -ilc "locale charmap"',
-        b'$SHELL -ic "locale charmap"'
+        b'$SHELL -ilc \'printf "\\036%s\\036" "$SHELL"; locale charmap; printf "\\036"\'',
+        b'$SHELL -ic \'printf "\\036%s\\036" "$SHELL"; locale charmap; printf "\\036"\''
     ]
     encodings = ['UTF-8', 'GBK', 'UTF-8\r\n', 'GBK\r\n']
 
@@ -117,7 +117,7 @@ class Server(paramiko.ServerInterface):
         else:
             ret = True
             self.encoding = self.cmd_to_enc[command]
-            channel.send(self.encoding)
+            channel.send('\x1eunsupported\x1e{}\x1e'.format(self.encoding))
             channel.shutdown(1)
         self.exec_event.set()
         return ret
