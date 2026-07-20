@@ -1664,6 +1664,7 @@
 
       .group-tools {
         display: flex;
+        flex: 0 0 auto;
         gap: 4px;
       }
 
@@ -1689,6 +1690,49 @@
         color: var(--primary-strong);
         background: var(--primary-tint);
         border-color: var(--primary);
+      }
+
+      .group-tools .broadcast-scope-toggle {
+        display: grid;
+        flex: 0 0 auto;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 112px;
+        height: 32px;
+        padding: 3px;
+        gap: 2px;
+        background: #f1f5f9;
+        border: 1px solid #dbe3ee;
+        border-radius: 9px;
+      }
+
+      .group-tools .broadcast-scope-option {
+        display: block;
+        width: auto;
+        height: 24px;
+        padding: 0 7px;
+        color: #64748b;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+        transition: background 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .group-tools .broadcast-scope-option:hover {
+        color: #334155;
+        background: rgba(255, 255, 255, 0.56);
+        border-color: transparent;
+      }
+
+      .group-tools .broadcast-scope-option.is-active,
+      .group-tools .broadcast-scope-option.is-active:hover {
+        color: #0f172a;
+        background: #ffffff;
+        border-color: #e2e8f0;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
       }
 
       .group-resize-handle {
@@ -1885,6 +1929,11 @@
         box-shadow: var(--shadow-lg);
       }
 
+      .terminal-card.is-broadcast-selected {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.24), 0 10px 26px rgba(2, 6, 23, 0.2);
+      }
+
       .card-placeholder {
         flex: 0 0 auto;
         height: 120px;
@@ -2020,6 +2069,12 @@
         color: #ffffff;
         background: #1e293b;
         border-color: #475569;
+      }
+
+      .terminal-tools button.broadcast-select-terminal.is-active {
+        color: #dcfce7;
+        background: #166534;
+        border-color: #22c55e;
       }
 
       .terminal-tools button:disabled {

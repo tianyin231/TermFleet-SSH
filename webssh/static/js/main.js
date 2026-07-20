@@ -82,7 +82,21 @@
       historyCandidate: '历史',
       commonCandidate: '常用',
       broadcastPlaceholder: '向分组广播命令...',
+      broadcastSelectedPlaceholder: '向已选 {count} 广播命令...',
+      broadcastSelectedEmptyPlaceholder: '请先选择要广播的终端...',
       broadcastLabel: '向 {name} 广播命令',
+      broadcastSelectedLabel: '向 {name} 中已选的 {count} 广播命令',
+      broadcastSelectionSummary: '{total} · 已选 {selected}',
+      selectForBroadcast: '选择 {name} 用于部分广播',
+      unselectForBroadcast: '取消选择 {name}',
+      toggleBroadcastScope: '切换当前分组广播范围',
+      broadcastScopeAll: '全部',
+      broadcastScopeSelected: '已选',
+      broadcastScopeAllLabel: '广播范围：全部终端；点击切换为已选终端',
+      broadcastScopeSelectedLabel: '广播范围：已选终端；点击切换为全部终端',
+      broadcastScopeAllToast: '{name} 将向全部终端广播。',
+      broadcastScopeSelectedToast: '{name} 将只向已选终端广播。',
+      noSelectedBroadcastTargets: '{name} 处于已选广播模式，请先选择终端。',
       uploadFile: '上传文件',
       uploadToGroup: '向分组上传文件',
       fileUpload: '文件上传',
@@ -187,6 +201,7 @@
       ctrlZ: 'Ctrl+Z',
       ctrlL: 'Ctrl+L',
       tabKey: 'Tab',
+      enterKey: 'Enter',
       escKey: 'Esc',
       broadcastShortcut: '广播控制键',
       reconnectTerminal: '重新连接',
@@ -265,7 +280,21 @@
       historyCandidate: 'History',
       commonCandidate: 'Common',
       broadcastPlaceholder: 'Broadcast command to group...',
+      broadcastSelectedPlaceholder: 'Broadcast to selected {count}...',
+      broadcastSelectedEmptyPlaceholder: 'Select terminals before broadcasting...',
       broadcastLabel: 'Broadcast command to {name}',
+      broadcastSelectedLabel: 'Broadcast command to selected {count} in {name}',
+      broadcastSelectionSummary: '{total} · {selected} selected',
+      selectForBroadcast: 'Select {name} for partial broadcast',
+      unselectForBroadcast: 'Deselect {name}',
+      toggleBroadcastScope: 'Toggle current group broadcast scope',
+      broadcastScopeAll: 'All',
+      broadcastScopeSelected: 'Selected',
+      broadcastScopeAllLabel: 'Broadcast scope: all terminals; activate for selected terminals',
+      broadcastScopeSelectedLabel: 'Broadcast scope: selected terminals; activate for all terminals',
+      broadcastScopeAllToast: '{name} will broadcast to all terminals.',
+      broadcastScopeSelectedToast: '{name} will broadcast only to selected terminals.',
+      noSelectedBroadcastTargets: '{name} is in selected broadcast mode. Select at least one terminal.',
       uploadFile: 'Upload file',
       uploadToGroup: 'Upload file to group',
       fileUpload: 'File upload',
@@ -370,6 +399,7 @@
       ctrlZ: 'Ctrl+Z',
       ctrlL: 'Ctrl+L',
       tabKey: 'Tab',
+      enterKey: 'Enter',
       escKey: 'Esc',
       broadcastShortcut: 'Broadcast key combo',
       reconnectTerminal: 'Reconnect',
@@ -414,6 +444,7 @@
   var DEFAULT_SHORTCUTS = {
     connectServer: 'mod+shift+c',
     togglePersistentPanels: 'mod+alt+p',
+    toggleBroadcastScope: 'mod+alt+s',
     hostManager: 'mod+shift+h',
     systemSettings: 'mod+shift+,',
     operationLog: '',
@@ -424,6 +455,7 @@
   var SHORTCUT_ACTIONS = [
     { id: 'connectServer', labelKey: 'connectServer', buttonSelector: '.sidebar-rail' },
     { id: 'togglePersistentPanels', labelKey: 'togglePersistentPanels', buttonSelector: '.topbar-rail' },
+    { id: 'toggleBroadcastScope', labelKey: 'toggleBroadcastScope', buttonSelector: '.broadcast-scope-toggle' },
     { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
     { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
     { id: 'operationLog', labelKey: 'operationLog', buttonSelector: '#open-log' },
@@ -603,6 +635,8 @@
     reconnect: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.1 7.1L4 9M5.5 14a7 7 0 0 0 12.4 2.9L20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     pin: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6v5l3 7H6l3-7V4ZM12 16v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     pinActive: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6v5l3 7H6l3-7V4Z" fill="currentColor"/><path d="M12 16v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    select: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>',
+    selectActive: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     maximize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     minimize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4v3a2 2 0 0 1-2 2H4M15 4v3a2 2 0 0 0 2 2h3M9 20v-3a2 2 0 0 0-2-2H4M15 20v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
@@ -780,14 +814,14 @@
 
   function applyShortcutBindings() {
     SHORTCUT_ACTIONS.forEach(function (action) {
-      var button = $(action.buttonSelector);
-      if (!button) { return; }
       var value = shortcutToAria(settings.shortcuts[action.id]);
-      if (value) {
-        button.setAttribute('aria-keyshortcuts', value);
-      } else {
-        button.removeAttribute('aria-keyshortcuts');
-      }
+      document.querySelectorAll(action.buttonSelector).forEach(function (button) {
+        if (value) {
+          button.setAttribute('aria-keyshortcuts', value);
+        } else {
+          button.removeAttribute('aria-keyshortcuts');
+        }
+      });
     });
   }
 
@@ -1021,7 +1055,6 @@
       var reconnectFailedBtn = column.querySelector('.group-reconnect-failed');
       var fullscreenBtn = column.querySelector('.group-fullscreen-btn');
       var deleteBtn = column.querySelector('.danger-hover');
-      var input = column.querySelector('.broadcast input');
       var historyList = column.querySelector('.broadcast-history');
       var shortcut = column.querySelector('.broadcast select');
       var upload = column.querySelector('.broadcast-upload');
@@ -1044,10 +1077,6 @@
         fullscreenBtn.setAttribute('title', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
         fullscreenBtn.setAttribute('aria-label', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
       }
-      if (input) {
-        input.setAttribute('placeholder', t('broadcastPlaceholder'));
-        input.setAttribute('aria-label', t('broadcastLabel', { name: group.name }));
-      }
       if (historyList) { historyList.setAttribute('aria-label', t('broadcastHistory')); }
       if (shortcut) {
         shortcut.setAttribute('title', t('broadcastShortcut'));
@@ -1058,13 +1087,15 @@
         shortcut.options[3].textContent = t('ctrlZ');
         shortcut.options[4].textContent = t('ctrlL');
         shortcut.options[5].textContent = t('tabKey');
-        shortcut.options[6].textContent = t('escKey');
+        shortcut.options[6].textContent = t('enterKey');
+        shortcut.options[7].textContent = t('escKey');
       }
       if (upload) {
         upload.setAttribute('title', t('uploadToGroup'));
         upload.setAttribute('aria-label', t('uploadToGroup'));
       }
       if (sendText) { sendText.textContent = t('send'); }
+      refreshBroadcastSelection(group.id);
       updateEmptyState(group.id);
     });
 
@@ -1081,6 +1112,7 @@
     var header = record.card.querySelector('.terminal-header');
     var placeholder = record.card.querySelector('.terminal-placeholder');
     var resize = record.card.querySelector('.resize-handle');
+    refreshTerminalBroadcastSelection(record);
     if (upload) {
       upload.setAttribute('title', t('uploadFile'));
       upload.setAttribute('aria-label', t('uploadFile'));
@@ -1135,6 +1167,7 @@
       'ctrl+l': '\x0c',
       '^l': '\x0c',
       'tab': '\t',
+      'enter': '\r',
       'esc': '\x1b',
       'escape': '\x1b'
     };
@@ -1200,6 +1233,7 @@
       bodyHeight: session.bodyHeight || '',
       isLocal: !!session.isLocal,
       autoReconnect: !!session.autoReconnect || !!session.isLocal,
+      broadcastSelected: !!session.broadcastSelected,
       reconnectInfo: reconnectInfo
     };
   }
@@ -1214,6 +1248,7 @@
       bodyHeight: record.body ? record.body.style.height : '',
       isLocal: record.isLocal,
       autoReconnect: record.autoReconnect,
+      broadcastSelected: !!record.broadcastSelected,
       reconnectInfo: record.reconnectInfo
     });
   }
@@ -1263,6 +1298,7 @@
         rowSpan: column ? Number(column.dataset.rowSpan) || null : group.rowSpan || null,
         manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize,
         pinned: !!group.pinned,
+        broadcastSelectedOnly: !!group.broadcastSelectedOnly,
         pinnedSessions: group.pinned ? (group.pinnedSessions || []).map(safePinnedSession).filter(Boolean) : []
       };
     });
@@ -1282,6 +1318,7 @@
         rowSpan: stackedLayout ? item.rowSpan : null,
         manualSize: stackedLayout && item.manualSize,
         pinned: !!item.pinned,
+        broadcastSelectedOnly: !!item.broadcastSelectedOnly,
         pinnedSessions: (item.pinnedSessions || []).map(safePinnedSession).filter(Boolean),
         skipSave: true
       });
@@ -1308,6 +1345,7 @@
         groupId: record.group,
         groupName: group ? group.name : '',
         isLocal: !!record.isLocal,
+        broadcastSelected: !!record.broadcastSelected,
         currentDirectory: record.currentDirectory || ''
       };
     }).filter(function (item) { return item.workerId; });
@@ -1353,6 +1391,7 @@
             currentDirectory: session.currentDirectory || '',
             persistentId: session.persistentId,
             autoReconnect: !!session.autoReconnect,
+            broadcastSelected: !!session.broadcastSelected,
             reconnectInfo: session.reconnectInfo || null
           });
           record.workerId = session.workerId;
@@ -1385,6 +1424,7 @@
           bodyHeight: session.bodyHeight,
           persistentId: session.persistentId,
           autoReconnect: session.autoReconnect,
+          broadcastSelected: !!session.broadcastSelected,
           reconnectInfo: session.reconnectInfo
         });
         if (session.isLocal) {
@@ -1829,6 +1869,101 @@
       .filter(function (t) { return t.group === groupId; });
   }
 
+  function selectedBroadcastTerminals(groupId) {
+    return terminalsInGroup(groupId).filter(function (record) { return record.broadcastSelected; });
+  }
+
+  function broadcastRecipients(groupId) {
+    var group = groupById(groupId);
+    return group && group.broadcastSelectedOnly ?
+      selectedBroadcastTerminals(groupId) : terminalsInGroup(groupId);
+  }
+
+  function refreshGroupBroadcastScope(groupId) {
+    var group = groupById(groupId);
+    var column = board.querySelector('.group[data-group="' + groupId + '"]');
+    if (!group || !column) { return; }
+    var control = column.querySelector('.broadcast-scope-toggle');
+    if (!control) { return; }
+    var selectedOnly = !!group.broadcastSelectedOnly;
+    var label = t(selectedOnly ? 'broadcastScopeSelectedLabel' : 'broadcastScopeAllLabel');
+    var allButton = control.querySelector('.broadcast-scope-all');
+    var selectedButton = control.querySelector('.broadcast-scope-selected');
+    control.setAttribute('title', label);
+    control.setAttribute('aria-label', t('toggleBroadcastScope'));
+    if (allButton) {
+      allButton.classList.toggle('is-active', !selectedOnly);
+      allButton.setAttribute('aria-pressed', selectedOnly ? 'false' : 'true');
+      allButton.textContent = t('broadcastScopeAll');
+    }
+    if (selectedButton) {
+      selectedButton.classList.toggle('is-active', selectedOnly);
+      selectedButton.setAttribute('aria-pressed', selectedOnly ? 'true' : 'false');
+      selectedButton.textContent = t('broadcastScopeSelected');
+    }
+  }
+
+  function setGroupBroadcastScope(group, selectedOnly) {
+    if (!group || group.broadcastSelectedOnly === !!selectedOnly) { return; }
+    group.broadcastSelectedOnly = !!selectedOnly;
+    refreshGroupBroadcastScope(group.id);
+    refreshBroadcastSelection(group.id);
+    saveGroups();
+    var message = t(group.broadcastSelectedOnly ? 'broadcastScopeSelectedToast' : 'broadcastScopeAllToast', {
+      name: group.name
+    });
+    setStatus(message);
+    toast(message);
+  }
+
+  function refreshBroadcastSelection(groupId) {
+    var group = groupById(groupId);
+    var column = board.querySelector('.group[data-group="' + groupId + '"]');
+    if (!group || !column) { return; }
+    var selected = selectedBroadcastTerminals(groupId).length;
+    var total = countInGroup(groupId);
+    var selectedOnly = !!group.broadcastSelectedOnly;
+    var meta = column.querySelector('.group-meta');
+    var input = column.querySelector('.broadcast input');
+    if (meta) {
+      meta.textContent = selected ? t('broadcastSelectionSummary', {
+        total: terminalCountText(total), selected: terminalCountText(selected)
+      }) : terminalCountText(total);
+    }
+    if (input) {
+      input.setAttribute('placeholder', selectedOnly ? (selected ?
+        t('broadcastSelectedPlaceholder', { count: terminalCountText(selected) }) :
+        t('broadcastSelectedEmptyPlaceholder')) : t('broadcastPlaceholder'));
+      input.setAttribute('aria-label', selectedOnly ? t('broadcastSelectedLabel', {
+        name: group.name, count: terminalCountText(selected)
+      }) : t('broadcastLabel', { name: group.name }));
+    }
+    refreshGroupBroadcastScope(groupId);
+  }
+
+  function refreshTerminalBroadcastSelection(record) {
+    var button = record.card.querySelector('.broadcast-select-terminal');
+    if (!button) { return; }
+    var selected = !!record.broadcastSelected;
+    var label = t(selected ? 'unselectForBroadcast' : 'selectForBroadcast', {
+      name: record.displayName || record.hostname
+    });
+    record.card.classList.toggle('is-broadcast-selected', selected);
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    button.setAttribute('title', label);
+    button.setAttribute('aria-label', label);
+    button.innerHTML = selected ? ICONS.selectActive : ICONS.select;
+  }
+
+  function setTerminalBroadcastSelected(record, selected) {
+    var changed = record.broadcastSelected !== !!selected;
+    record.broadcastSelected = !!selected;
+    refreshTerminalBroadcastSelection(record);
+    refreshBroadcastSelection(record.group);
+    if (changed) { saveSessions(); }
+  }
+
   // ---- Rendering ---------------------------------------------------------
   function refreshGroupSelect() {
     var current = groupSelect.value;
@@ -1969,11 +2104,7 @@
     summary.textContent = t('connectedSummary', { count: connected, groups: groupCountText(groups.length) });
 
     groups.forEach(function (group) {
-      var meta = board.querySelector('.group-meta[data-meta="' + group.id + '"]');
-      if (meta) {
-        var n = countInGroup(group.id);
-        meta.textContent = terminalCountText(n);
-      }
+      refreshBroadcastSelection(group.id);
       updateEmptyState(group.id);
     });
     if (hostManagerOverlay.classList.contains('is-open')) { renderHostManagerTerminals(); }
@@ -2097,6 +2228,21 @@
       'aria-label': t(group.pinned ? 'unpinGroup' : 'pinGroup'),
       html: group.pinned ? ICONS.pinActive : ICONS.pin
     });
+    var broadcastScopeAllBtn = el('button', {
+      class: 'broadcast-scope-option broadcast-scope-all' + (group.broadcastSelectedOnly ? '' : ' is-active'),
+      type: 'button', 'aria-pressed': group.broadcastSelectedOnly ? 'false' : 'true',
+      text: t('broadcastScopeAll')
+    });
+    var broadcastScopeSelectedBtn = el('button', {
+      class: 'broadcast-scope-option broadcast-scope-selected' + (group.broadcastSelectedOnly ? ' is-active' : ''),
+      type: 'button', 'aria-pressed': group.broadcastSelectedOnly ? 'true' : 'false',
+      text: t('broadcastScopeSelected')
+    });
+    var broadcastScopeControl = el('div', {
+      class: 'broadcast-scope-toggle', role: 'group',
+      title: t(group.broadcastSelectedOnly ? 'broadcastScopeSelectedLabel' : 'broadcastScopeAllLabel'),
+      'aria-label': t('toggleBroadcastScope')
+    }, [broadcastScopeAllBtn, broadcastScopeSelectedBtn]);
     var reconnectFailedBtn = el('button', {
       class: 'group-reconnect-failed', type: 'button',
       title: t('reconnectFailedGroup'), 'aria-label': t('reconnectFailedGroup'), html: ICONS.reconnect
@@ -2107,13 +2253,15 @@
       'aria-label': t('groupFullscreen'), html: ICONS.maximize
     });
     pinBtn.addEventListener('click', function () { toggleGroupPinned(group, pinBtn); });
+    broadcastScopeAllBtn.addEventListener('click', function () { setGroupBroadcastScope(group, false); });
+    broadcastScopeSelectedBtn.addEventListener('click', function () { setGroupBroadcastScope(group, true); });
     reconnectFailedBtn.addEventListener('click', function () { reconnectFailedGroup(group); });
     fullscreenBtn.addEventListener('click', function () { toggleGroupFullscreen(group.id, fullscreenBtn); });
     deleteBtn.addEventListener('click', function () { removeGroup(group.id); });
 
     var head = el('div', { class: 'group-head' }, [
       grip, title,
-      el('div', { class: 'group-tools' }, [pinBtn, reconnectFailedBtn, fullscreenBtn, deleteBtn])
+      el('div', { class: 'group-tools' }, [broadcastScopeControl, pinBtn, reconnectFailedBtn, fullscreenBtn, deleteBtn])
     ]);
 
     // Broadcast bar.
@@ -2331,6 +2479,7 @@
       el('option', { value: 'ctrl+z', text: t('ctrlZ') }),
       el('option', { value: 'ctrl+l', text: t('ctrlL') }),
       el('option', { value: 'tab', text: t('tabKey') }),
+      el('option', { value: 'enter', text: t('enterKey') }),
       el('option', { value: 'esc', text: t('escKey') })
     ]);
     var uploadBtn = el('button', {
@@ -2342,9 +2491,9 @@
     broadcastForm.addEventListener('submit', function (event) {
       event.preventDefault();
       var value = input.value;
-      if (!value.trim()) { return; }
-      rememberBroadcastCommand(group.id, value);
-      broadcastToGroup(group.id, value);
+      var hasCommand = !!value.trim();
+      if (broadcastToGroup(group.id, hasCommand ? value : 'enter', broadcastRecipients(group.id)) === null) { return; }
+      if (hasCommand) { rememberBroadcastCommand(group.id, value); }
       closeCandidates(false);
       input.value = '';
       historyDraft = '';
@@ -2352,7 +2501,7 @@
     });
     shortcutSelect.addEventListener('change', function () {
       if (!shortcutSelect.value) { return; }
-      broadcastToGroup(group.id, shortcutSelect.value);
+      broadcastToGroup(group.id, shortcutSelect.value, broadcastRecipients(group.id));
       shortcutSelect.value = '';
     });
     uploadBtn.addEventListener('click', function () {
@@ -2387,6 +2536,7 @@
       nameEl.textContent = value;
       column.setAttribute('aria-label', value);
       refreshGroupSelect();
+      refreshBroadcastSelection(group.id);
       if (oldName !== value) {
         logAction('logRenameGroup', { oldName: oldName, newName: value });
       }
@@ -2398,6 +2548,7 @@
     startGroupResize(groupResizeHandle, group.id);
 
     board.appendChild(column);
+    applyShortcutBindings();
     observeGroupLayout(column);
     window.requestAnimationFrame(function () { updateGroupGridSpan(group.id); });
     return column;
@@ -2421,6 +2572,7 @@
       rowSpan: opts.rowSpan || null,
       manualSize: !!opts.manualSize,
       pinned: !!opts.pinned,
+      broadcastSelectedOnly: !!opts.broadcastSelectedOnly,
       pinnedSessions: (opts.pinnedSessions || []).map(safePinnedSession).filter(Boolean)
     };
     groups.push(group);
@@ -2507,12 +2659,17 @@
       ])
     ]);
 
+    var selectBroadcastBtn = el('button', {
+      class: 'broadcast-select-terminal', type: 'button', 'aria-pressed': 'false',
+      title: t('selectForBroadcast', { name: displayName }),
+      'aria-label': t('selectForBroadcast', { name: displayName }), html: ICONS.select
+    });
     var uploadBtn = el('button', { class: 'upload-terminal', type: 'button', title: t('uploadFile'), 'aria-label': t('uploadFile'), html: ICONS.plus });
     uploadBtn.disabled = true;
     var reconnectBtn = el('button', { class: 'reconnect-terminal', type: 'button', title: t('reconnectTerminal'), 'aria-label': t('reconnectTerminal'), html: ICONS.reconnect });
     var maxBtn = el('button', { class: 'maximize-terminal', type: 'button', title: t('maximize'), 'aria-label': t('maximize'), html: ICONS.maximize });
     var closeBtn = el('button', { class: 'close-btn', type: 'button', title: t('close'), 'aria-label': t('closeTerminal'), html: ICONS.close });
-    var tools = el('div', { class: 'terminal-tools' }, [uploadBtn, reconnectBtn, maxBtn, closeBtn]);
+    var tools = el('div', { class: 'terminal-tools' }, [selectBroadcastBtn, uploadBtn, reconnectBtn, maxBtn, closeBtn]);
 
     var header = el('div', {
       class: 'terminal-header', tabindex: '0', role: 'button',
@@ -2541,16 +2698,22 @@
       workerId: opts.workerId || null, isLocal: !!opts.isLocal,
       currentDirectory: opts.currentDirectory || '', osc7Buffer: '',
       persistentId: opts.persistentId || newPersistentSessionId(),
-      autoReconnect: !!opts.autoReconnect || !!opts.isLocal
+      autoReconnect: !!opts.autoReconnect || !!opts.isLocal,
+      broadcastSelected: !!opts.broadcastSelected
     };
     terminals[id] = record;
+    refreshTerminalBroadcastSelection(record);
 
     // Interactions.
     header.addEventListener('pointerdown', function (event) { startCardDrag(event, id); });
     header.addEventListener('keydown', function (event) {
+      if (event.target.closest('button')) { return; }
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); }
     });
     closeBtn.addEventListener('click', function () { closeTerminal(id, t('userClosed')); });
+    selectBroadcastBtn.addEventListener('click', function () {
+      setTerminalBroadcastSelected(record, !record.broadcastSelected);
+    });
     uploadBtn.addEventListener('click', function () { chooseUploadFile([record], uploadBtn); });
     reconnectBtn.addEventListener('click', function () { reconnectTerminal(record); });
     maxBtn.addEventListener('click', function () { toggleMaximize(record, maxBtn); });
@@ -2563,6 +2726,7 @@
       var next = nameEl.textContent.trim() || oldName;
       record.displayName = next;
       nameEl.textContent = next;
+      refreshTerminalBroadcastSelection(record);
       if (oldName !== next) {
         toast(t('terminalRenamed'));
         logAction('logRenameTerminal', { oldName: oldName, newName: next });
@@ -2688,6 +2852,7 @@
     if (pendingAuthenticationRecord === record) { closeReauthentication(false); }
     record.card.remove();
     delete terminals[id];
+    refreshBroadcastSelection(group);
     if (record.workerId) { removeSavedSession(record.workerId); }
     if (syncPinnedSessionSnapshots()) { saveGroups(); }
     logAction('logDisconnect', { name: record.displayName || record.hostname });
@@ -3120,17 +3285,24 @@
   }
 
   // ---- Broadcast ---------------------------------------------------------
-  function broadcastToGroup(groupId, command) {
+  function broadcastToGroup(groupId, command, records) {
+    var group = groupById(groupId);
+    var targets = records === undefined ? broadcastRecipients(groupId) : records;
+    var name = group ? group.name : groupId;
+    if (group && group.broadcastSelectedOnly && !targets.length) {
+      var message = t('noSelectedBroadcastTargets', { name: name });
+      setStatus(message);
+      toast(message, 'error');
+      return null;
+    }
     var seq = controlSequence(command);
     var payload = seq || (command.replace(/\s+$/, '') + (settings.broadcastEnter ? '\r' : ''));
     var sent = 0;
-    terminalsInGroup(groupId).forEach(function (record) {
+    targets.forEach(function (record) {
       if (sendToRecord(record, payload)) {
         sent += 1;
       }
     });
-    var group = groupById(groupId);
-    var name = group ? group.name : groupId;
     if (sent) {
       setStatus(t('sentStatus', { name: name, count: terminalCountText(sent) }));
       toast(t('broadcastToast', { name: name, count: terminalCountText(sent) }), 'success');
@@ -3138,6 +3310,7 @@
     } else {
       toast(t('noConnected', { name: name }), 'error');
     }
+    return sent > 0;
   }
 
   function formatFileSize(size) {
@@ -3478,9 +3651,13 @@
       parent.insertBefore(card, drag.placeholder);
       var newGroup = parent.getAttribute('data-list');
       var oldGroup = record.group;
+      if (oldGroup !== newGroup) { setTerminalBroadcastSelected(record, false); }
       record.group = newGroup;
       drag.placeholder.remove();
-      if (oldGroup !== newGroup) { updateEmptyState(oldGroup); }
+      if (oldGroup !== newGroup) {
+        updateEmptyState(oldGroup);
+        refreshBroadcastSelection(newGroup);
+      }
       updateSummary();
       saveSessions();
       updateGroupGridSpan(newGroup);
@@ -3626,6 +3803,7 @@
     var record = terminals[id];
     if (!record || record.group === groupId) { return; }
     var oldGroup = record.group;
+    setTerminalBroadcastSelected(record, false);
     record.group = groupId;
     var list = listEl(groupId);
     var empty = list.querySelector('.empty-state');
@@ -3633,6 +3811,7 @@
     list.appendChild(record.card);
     ensureGroupFitsTerminal(groupId);
     updateEmptyState(oldGroup);
+    refreshBroadcastSelection(groupId);
     updateSummary();
     saveSessions();
     fitTerminal(record);
@@ -3742,6 +3921,14 @@
   function runShortcutAction(actionId) {
     if (actionId === 'togglePersistentPanels') {
       togglePersistentPanels();
+      return;
+    }
+    if (actionId === 'toggleBroadcastScope') {
+      var focusedColumn = document.activeElement && document.activeElement.closest ?
+        document.activeElement.closest('.group') : null;
+      var group = groupById(focusedColumn && focusedColumn.getAttribute('data-group')) ||
+        groupById(groupSelect.value) || groups[0];
+      if (group) { setGroupBroadcastScope(group, !group.broadcastSelectedOnly); }
       return;
     }
     if (reauthOverlay.classList.contains('is-open')) { closeReauthentication(false); }
@@ -3971,7 +4158,8 @@
   // ---- Public hook (kept for compatibility) ------------------------------
   window.wssh = {
     send: function (data, groupId) {
-      broadcastToGroup(groupId || (groups[0] && groups[0].id), data);
+      var targetGroup = groupId || (groups[0] && groups[0].id);
+      broadcastToGroup(targetGroup, data, broadcastRecipients(targetGroup));
     }
   };
 
