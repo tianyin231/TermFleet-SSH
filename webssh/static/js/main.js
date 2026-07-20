@@ -64,6 +64,14 @@
       reorderGroup: '调整分组顺序',
       reorderGroupTitle: '拖动调整分组顺序',
       removeGroup: '删除分组',
+      pinGroup: '固定分组终端',
+      unpinGroup: '取消固定分组终端',
+      groupPinned: '已固定 {name}，保存 {count}。',
+      groupUnpinned: '已取消固定 {name}。',
+      authenticationRequired: '需要重新认证',
+      reauthenticate: '重新认证',
+      reauthenticateSession: '重新认证终端',
+      reauthenticationReady: '请为 {name} 重新输入认证信息。',
       broadcastPlaceholder: '向分组广播命令...',
       broadcastLabel: '向 {name} 广播命令',
       uploadFile: '上传文件',
@@ -229,6 +237,14 @@
       reorderGroup: 'Reorder group',
       reorderGroupTitle: 'Drag to reorder group',
       removeGroup: 'Remove group',
+      pinGroup: 'Pin group terminals',
+      unpinGroup: 'Unpin group terminals',
+      groupPinned: 'Pinned {name} with {count}.',
+      groupUnpinned: 'Unpinned {name}.',
+      authenticationRequired: 'Authentication required',
+      reauthenticate: 'Re-authenticate',
+      reauthenticateSession: 'Re-authenticate terminal',
+      reauthenticationReady: 'Enter authentication details again for {name}.',
       broadcastPlaceholder: 'Broadcast command to group...',
       broadcastLabel: 'Broadcast command to {name}',
       uploadFile: 'Upload file',
@@ -407,7 +423,9 @@
   var groupLayoutObserver = null;
   var hostManagerPreviousFocus = null;
   var systemSettingsPreviousFocus = null;
+  var reauthPreviousFocus = null;
   var hostManagerGroupId = null;
+  var pendingAuthenticationRecord = null;
   var uploadSelection = null;
   var uploadPickerRecords = [];
   var uploadPreviousFocus = null;
@@ -458,6 +476,16 @@
   var logOutput = $('#log-output');
   var privateKeyInput = $('#privatekey');
   var privateKeyName = $('#privatekey-name');
+  var reauthOverlay = $('#reauth-overlay');
+  var reauthForm = $('#reauth-form');
+  var closeReauthButton = $('#close-reauth');
+  var cancelReauthButton = $('#cancel-reauth');
+  var submitReauthButton = $('#submit-reauth');
+  var reauthPasswordInput = $('#reauth-password');
+  var reauthPrivateKeyInput = $('#reauth-privatekey');
+  var reauthPrivateKeyName = $('#reauth-privatekey-name');
+  var reauthTargetName = $('#reauth-target-name');
+  var reauthTargetMeta = $('#reauth-target-meta');
   var openLocalTerminalButton = $('#open-local-terminal');
   var fileUploadPicker = $('#file-upload-picker');
   var fileUploadOverlay = $('#file-upload-overlay');
@@ -499,6 +527,8 @@
     upload: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     trash: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     reconnect: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.1 7.1L4 9M5.5 14a7 7 0 0 0 12.4 2.9L20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pin: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6v5l3 7H6l3-7V4ZM12 16v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pinActive: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6v5l3 7H6l3-7V4Z" fill="currentColor"/><path d="M12 16v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     maximize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     minimize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4v3a2 2 0 0 1-2 2H4M15 4v3a2 2 0 0 0 2 2h3M9 20v-3a2 2 0 0 0-2-2H4M15 20v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
@@ -833,9 +863,9 @@
       column.setAttribute('aria-label', group.name);
       var nameEl = column.querySelector('.group-name');
       var grip = column.querySelector('.group-grip');
-      var groupButtons = column.querySelectorAll('.group-tools button');
-      var fullscreenBtn = groupButtons[0];
-      var deleteBtn = groupButtons[1];
+      var pinBtn = column.querySelector('.pin-group');
+      var fullscreenBtn = column.querySelector('.group-fullscreen-btn');
+      var deleteBtn = column.querySelector('.danger-hover');
       var input = column.querySelector('.broadcast input');
       var shortcut = column.querySelector('.broadcast select');
       var upload = column.querySelector('.broadcast-upload');
@@ -849,6 +879,7 @@
         deleteBtn.setAttribute('title', t('removeGroup'));
         deleteBtn.setAttribute('aria-label', t('removeGroup'));
       }
+      if (pinBtn) { updateGroupPinButton(group, pinBtn); }
       if (fullscreenBtn) {
         fullscreenBtn.setAttribute('title', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
         fullscreenBtn.setAttribute('aria-label', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
@@ -907,7 +938,13 @@
     }
     if (record.nameEl) { record.nameEl.setAttribute('title', t('renameTerminal')); }
     if (header) { header.setAttribute('aria-label', t('dragTerminal', { name: record.displayName || record.hostname })); }
-    if (placeholder) { placeholder.textContent = t('establishing'); }
+    if (placeholder) {
+      if (record.stateKey === 'authenticationRequired') {
+        renderAuthenticationRequired(record);
+      } else {
+        placeholder.textContent = record.stateKey ? t(record.stateKey) : t('establishing');
+      }
+    }
     if (resize) { resize.setAttribute('title', t('resize')); }
     if (record.stateKey) { record.stateText.textContent = t(record.stateKey); }
     if (record.networkText) {
@@ -974,6 +1011,64 @@
     };
   }
 
+  function newPersistentSessionId() {
+    return 'session-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function canReconnectWithoutStoredSecrets(data) {
+    if (!data) { return false; }
+    var privatekey = data.get('privatekey');
+    var hasPrivateKey = privatekey && (typeof privatekey === 'string' ?
+      !!privatekey.trim() : !!(privatekey.name || privatekey.size));
+    return !hasPrivateKey && !['password', 'passphrase', 'totp'].some(function (name) {
+      var value = data.get(name);
+      return typeof value === 'string' && !!value.trim();
+    });
+  }
+
+  function safePinnedSession(session) {
+    if (!session) { return null; }
+    var reconnectInfo = safeReconnectInfo(session.reconnectInfo);
+    if (!reconnectInfo) { return null; }
+    return {
+      persistentId: session.persistentId || newPersistentSessionId(),
+      hostname: session.hostname || '',
+      username: session.username || '',
+      port: session.port || (session.isLocal ? '0' : '22'),
+      displayName: session.displayName || session.hostname || '',
+      bodyHeight: session.bodyHeight || '',
+      isLocal: !!session.isLocal,
+      autoReconnect: !!session.autoReconnect || !!session.isLocal,
+      reconnectInfo: reconnectInfo
+    };
+  }
+
+  function pinnedSessionFromRecord(record) {
+    return safePinnedSession({
+      persistentId: record.persistentId,
+      hostname: record.hostname,
+      username: record.username,
+      port: record.port,
+      displayName: record.displayName,
+      bodyHeight: record.body ? record.body.style.height : '',
+      isLocal: record.isLocal,
+      autoReconnect: record.autoReconnect,
+      reconnectInfo: record.reconnectInfo
+    });
+  }
+
+  function syncPinnedSessionSnapshots() {
+    var changed = false;
+    groups.filter(function (group) { return group.pinned; }).forEach(function (group) {
+      var next = terminalsInGroup(group.id).map(pinnedSessionFromRecord).filter(Boolean);
+      if (JSON.stringify(group.pinnedSessions || []) !== JSON.stringify(next)) {
+        group.pinnedSessions = next;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function cloneFormData(data) {
     var copy = new window.FormData();
     data.forEach(function (value, key) {
@@ -1005,7 +1100,9 @@
         layoutMode: 'stacked-v1',
         colSpan: column ? Number(column.dataset.colSpan) || null : group.colSpan || null,
         rowSpan: column ? Number(column.dataset.rowSpan) || null : group.rowSpan || null,
-        manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize
+        manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize,
+        pinned: !!group.pinned,
+        pinnedSessions: group.pinned ? (group.pinnedSessions || []).map(safePinnedSession).filter(Boolean) : []
       };
     });
     window.localStorage.setItem('wssh-groups', JSON.stringify(records));
@@ -1023,6 +1120,8 @@
         colSpan: stackedLayout ? item.colSpan : null,
         rowSpan: stackedLayout ? item.rowSpan : null,
         manualSize: stackedLayout && item.manualSize,
+        pinned: !!item.pinned,
+        pinnedSessions: (item.pinnedSessions || []).map(safePinnedSession).filter(Boolean),
         skipSave: true
       });
     });
@@ -1031,6 +1130,7 @@
   }
 
   function saveSessions() {
+    if (syncPinnedSessionSnapshots()) { saveGroups(); }
     var records = Object.keys(terminals).map(function (id) {
       var record = terminals[id];
       var group = groupById(record.group);
@@ -1042,6 +1142,8 @@
         displayName: record.displayName,
         bodyHeight: record.body ? record.body.style.height : '',
         reconnectInfo: safeReconnectInfo(record.reconnectInfo),
+        persistentId: record.persistentId,
+        autoReconnect: !!record.autoReconnect,
         groupId: record.group,
         groupName: group ? group.name : '',
         isLocal: !!record.isLocal,
@@ -1067,7 +1169,10 @@
 
   function restoreSessions() {
     var saved = loadSessionRecords();
-    if (!saved.length) { return; }
+    if (!saved.length) {
+      restorePinnedSessions();
+      return;
+    }
     setStatus(t('restoringSessions'));
     window.fetch('active-workers', { credentials: 'same-origin' })
       .then(function (response) { return response.ok ? response.json() : { ids: [] }; })
@@ -1085,14 +1190,52 @@
             isLocal: session.isLocal,
             bodyHeight: session.bodyHeight,
             currentDirectory: session.currentDirectory || '',
+            persistentId: session.persistentId,
+            autoReconnect: !!session.autoReconnect,
             reconnectInfo: session.reconnectInfo || null
           });
           record.workerId = session.workerId;
           openSocket(record, session.workerId, 'utf-8');
           logAction('logRestored', { name: record.displayName || record.hostname });
         });
+        restorePinnedSessions();
         saveSessions();
+      }).catch(function () {
+        restorePinnedSessions();
       });
+  }
+
+  function restorePinnedSessions() {
+    var existing = Object.create(null);
+    Object.keys(terminals).forEach(function (id) {
+      existing[terminals[id].persistentId] = true;
+    });
+    groups.filter(function (group) { return group.pinned; }).forEach(function (group) {
+      (group.pinnedSessions || []).map(safePinnedSession).filter(Boolean).forEach(function (session) {
+        if (existing[session.persistentId]) { return; }
+        existing[session.persistentId] = true;
+        var record = createCard({
+          hostname: session.hostname,
+          username: session.username,
+          port: session.port,
+          group: group.id,
+          displayName: session.displayName,
+          isLocal: session.isLocal,
+          bodyHeight: session.bodyHeight,
+          persistentId: session.persistentId,
+          autoReconnect: session.autoReconnect,
+          reconnectInfo: session.reconnectInfo
+        });
+        if (session.isLocal) {
+          reconnectLocalTerminal(record);
+        } else if (session.autoReconnect) {
+          reconnectSshTerminal(record, session.reconnectInfo, true);
+        } else {
+          setCardState(record, 'error', null, 'authenticationRequired');
+          renderAuthenticationRequired(record);
+        }
+      });
+    });
   }
 
   function hostAuthLabel(host) {
@@ -1406,6 +1549,7 @@
   function openHostManager() {
     if (!closeUploadDialog(false)) { return; }
     hostManagerPreviousFocus = modalReturnFocus(openHostManagerButton);
+    closeReauthentication(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
     if (groupById(groupSelect.value)) { hostManagerGroupId = groupSelect.value; }
@@ -1429,7 +1573,7 @@
   function modalReturnFocus(fallback) {
     var active = document.activeElement;
     if (!active || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) ||
-        fileUploadOverlay.contains(active) || logOverlay.contains(active)) {
+        reauthOverlay.contains(active) || fileUploadOverlay.contains(active) || logOverlay.contains(active)) {
       return fallback;
     }
     return active;
@@ -1438,6 +1582,7 @@
   function openSystemSettings() {
     if (!closeUploadDialog(false)) { return; }
     systemSettingsPreviousFocus = modalReturnFocus(openSystemSettingsButton);
+    closeReauthentication(false);
     closeHostManager(false);
     logOverlay.classList.remove('is-open');
     renderShortcutSettings();
@@ -1677,7 +1822,7 @@
     appShell.classList.remove('group-fullscreen');
     board.querySelectorAll('.group').forEach(function (column) {
       column.classList.remove('is-focused');
-      var btn = column.querySelector('.group-tools button');
+      var btn = column.querySelector('.group-fullscreen-btn');
       if (btn) {
         btn.innerHTML = ICONS.maximize;
         btn.setAttribute('title', t('groupFullscreen'));
@@ -1689,6 +1834,31 @@
       terminalsInGroup(oldGroupId).forEach(fitTerminal);
       updateAllGroupGridSpans();
     }, 80);
+  }
+
+  function updateGroupPinButton(group, button) {
+    var pinned = !!group.pinned;
+    button.classList.toggle('is-active', pinned);
+    button.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    button.setAttribute('title', t(pinned ? 'unpinGroup' : 'pinGroup'));
+    button.setAttribute('aria-label', t(pinned ? 'unpinGroup' : 'pinGroup'));
+    button.innerHTML = pinned ? ICONS.pinActive : ICONS.pin;
+  }
+
+  function toggleGroupPinned(group, button) {
+    group.pinned = !group.pinned;
+    group.pinnedSessions = group.pinned ? terminalsInGroup(group.id)
+      .map(pinnedSessionFromRecord).filter(Boolean) : [];
+    updateGroupPinButton(group, button);
+    saveGroups();
+    if (group.pinned) {
+      toast(t('groupPinned', {
+        name: group.name,
+        count: terminalCountText(group.pinnedSessions.length)
+      }), 'success');
+    } else {
+      toast(t('groupUnpinned', { name: group.name }));
+    }
   }
 
   function renderGroup(group) {
@@ -1716,16 +1886,25 @@
       class: 'danger-hover', type: 'button', title: t('removeGroup'),
       'aria-label': t('removeGroup'), html: ICONS.trash
     });
+    var pinBtn = el('button', {
+      class: 'pin-group' + (group.pinned ? ' is-active' : ''),
+      type: 'button', 'aria-pressed': group.pinned ? 'true' : 'false',
+      title: t(group.pinned ? 'unpinGroup' : 'pinGroup'),
+      'aria-label': t(group.pinned ? 'unpinGroup' : 'pinGroup'),
+      html: group.pinned ? ICONS.pinActive : ICONS.pin
+    });
     var fullscreenBtn = el('button', {
+      class: 'group-fullscreen-btn',
       type: 'button', title: t('groupFullscreen'),
       'aria-label': t('groupFullscreen'), html: ICONS.maximize
     });
+    pinBtn.addEventListener('click', function () { toggleGroupPinned(group, pinBtn); });
     fullscreenBtn.addEventListener('click', function () { toggleGroupFullscreen(group.id, fullscreenBtn); });
     deleteBtn.addEventListener('click', function () { removeGroup(group.id); });
 
     var head = el('div', { class: 'group-head' }, [
       grip, title,
-      el('div', { class: 'group-tools' }, [fullscreenBtn, deleteBtn])
+      el('div', { class: 'group-tools' }, [pinBtn, fullscreenBtn, deleteBtn])
     ]);
 
     // Broadcast bar.
@@ -1826,7 +2005,9 @@
       number: number,
       colSpan: opts.colSpan || null,
       rowSpan: opts.rowSpan || null,
-      manualSize: !!opts.manualSize
+      manualSize: !!opts.manualSize,
+      pinned: !!opts.pinned,
+      pinnedSessions: (opts.pinnedSessions || []).map(safePinnedSession).filter(Boolean)
     };
     groups.push(group);
     renderGroup(group);
@@ -1943,7 +2124,9 @@
       stateText: stateText, networkText: networkText, reconnectInfo: opts.reconnectInfo || null,
       term: null, sock: null, decoder: 'utf-8', state: 'connecting', stateKey: 'connecting', observer: null,
       workerId: opts.workerId || null, isLocal: !!opts.isLocal,
-      currentDirectory: opts.currentDirectory || '', osc7Buffer: ''
+      currentDirectory: opts.currentDirectory || '', osc7Buffer: '',
+      persistentId: opts.persistentId || newPersistentSessionId(),
+      autoReconnect: !!opts.autoReconnect || !!opts.isLocal
     };
     terminals[id] = record;
 
@@ -2062,6 +2245,18 @@
     record.body.appendChild(el('div', { class: 'terminal-placeholder', text: message || t('establishing') }));
   }
 
+  function renderAuthenticationRequired(record) {
+    resetTerminalView(record, t('authenticationRequired'));
+    var placeholder = record.body.querySelector('.terminal-placeholder');
+    placeholder.innerHTML = '';
+    placeholder.appendChild(el('span', { text: t('authenticationRequired') }));
+    var button = el('button', {
+      class: 'btn btn-primary btn-sm', type: 'button', text: t('reauthenticate')
+    });
+    button.addEventListener('click', function () { beginReauthentication(record); });
+    placeholder.appendChild(button);
+  }
+
   function closeTerminal(id, reason) {
     var record = terminals[id];
     if (!record) { return; }
@@ -2075,9 +2270,11 @@
       try { record.term.dispose(); } catch (e) { /* noop */ }
     }
     var group = record.group;
+    if (pendingAuthenticationRecord === record) { closeReauthentication(false); }
     record.card.remove();
     delete terminals[id];
     if (record.workerId) { removeSavedSession(record.workerId); }
+    if (syncPinnedSessionSnapshots()) { saveGroups(); }
     logAction('logDisconnect', { name: record.displayName || record.hostname });
     updateSummary();
     updateEmptyState(group);
@@ -2099,8 +2296,47 @@
     }
   }
 
-  function reconnectTerminal(record) {
+  function beginReauthentication(record) {
+    if (!closeUploadDialog(false)) { return; }
+    var info = record.reconnectInfo || {};
+    reauthPreviousFocus = modalReturnFocus(record.card.querySelector('.reconnect-terminal'));
+    pendingAuthenticationRecord = record;
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    reauthForm.reset();
+    reauthPrivateKeyName.textContent = t('noFileChosen');
+    reauthTargetName.textContent = record.displayName || record.hostname;
+    var group = groupById(record.group);
+    reauthTargetMeta.textContent = (info.username || record.username) + '@' +
+      (info.hostname || record.hostname) + ':' + (info.port || record.port || '22') +
+      (group ? ' · ' + group.name : '');
+    reauthOverlay.classList.add('is-open');
+    reauthOverlay.setAttribute('aria-hidden', 'false');
+    var message = t('reauthenticationReady', { name: record.displayName || record.hostname });
+    setStatus(message);
+    window.setTimeout(function () { reauthPasswordInput.focus(); }, 0);
+  }
+
+  function closeReauthentication(restoreFocus) {
+    if (!reauthOverlay.classList.contains('is-open')) { return; }
+    reauthOverlay.classList.remove('is-open');
+    reauthOverlay.setAttribute('aria-hidden', 'true');
+    pendingAuthenticationRecord = null;
+    reauthForm.reset();
+    reauthPrivateKeyName.textContent = t('noFileChosen');
+    if (restoreFocus !== false && reauthPreviousFocus && document.contains(reauthPreviousFocus)) {
+      reauthPreviousFocus.focus();
+    }
+    reauthPreviousFocus = null;
+  }
+
+  function reconnectTerminal(record, credentialsReady) {
     if (!record || record.state === 'connecting') { return; }
+    if (!credentialsReady && (record.stateKey === 'authenticationRequired' || pendingAuthenticationRecord === record)) {
+      beginReauthentication(record);
+      return;
+    }
     var info = record.reconnectInfo || safeReconnectInfo({
       type: record.isLocal ? 'local' : 'ssh',
       hostname: record.hostname,
@@ -2144,6 +2380,7 @@
       if (!msg || !msg.id) { throw new Error(t('localTerminalFailed')); }
       record.workerId = msg.id;
       record.reconnectInfo = { type: 'local' };
+      record.autoReconnect = true;
       openSocket(record, msg.id, 'utf-8');
       saveSessions();
     }).catch(function () {
@@ -2151,32 +2388,58 @@
     });
   }
 
-  function reconnectSshTerminal(record, info) {
-    var data = record.reconnectData ? cloneFormData(record.reconnectData) : new window.FormData(connectForm);
+  function reconnectSshTerminal(record, info, automatic) {
+    var reauthenticating = !automatic && pendingAuthenticationRecord === record;
+    var data;
+    if (automatic) {
+      data = new window.FormData();
+      data.set('_xsrf', xsrfToken());
+      data.set('term', 'xterm-256color');
+    } else {
+      data = record.reconnectData ? cloneFormData(record.reconnectData) : new window.FormData(connectForm);
+    }
     data.set('hostname', info.hostname || record.hostname);
     data.set('username', info.username || record.username);
     data.set('port', info.port || record.port || '22');
     data.set('target_group', record.group);
     data.set('ssh_config_host', info.sshConfigHost || '');
     cleanData(data);
+    if (reauthenticating) { submitReauthButton.disabled = true; }
     var xhr = new window.XMLHttpRequest();
     xhr.open('POST', '', true);
     xhr.onreadystatechange = function () {
       if (xhr.readyState !== 4) { return; }
+      if (reauthenticating) { submitReauthButton.disabled = false; }
       if (xhr.status !== 200) {
-        setCardState(record, 'error', xhr.status + ': ' + xhr.statusText);
+        var requestError = xhr.status + ': ' + xhr.statusText;
+        if (reauthenticating) {
+          setCardState(record, 'error', null, 'authenticationRequired');
+          renderAuthenticationRequired(record);
+          toast(requestError, 'error');
+        } else {
+          setCardState(record, 'error', requestError);
+        }
         return;
       }
       var msg;
       try { msg = JSON.parse(xhr.responseText); } catch (e) { msg = null; }
       if (!msg || !msg.id) {
-        setCardState(record, 'error', (msg && msg.status) || t('connectionFailed'));
+        var connectionError = (msg && msg.status) || t('connectionFailed');
+        if (reauthenticating) {
+          setCardState(record, 'error', null, 'authenticationRequired');
+          renderAuthenticationRequired(record);
+          toast(connectionError, 'error');
+        } else {
+          setCardState(record, 'error', connectionError);
+        }
         return;
       }
       record.workerId = msg.id;
       record.reconnectInfo = safeReconnectInfo(info);
       record.reconnectData = cloneFormData(data);
+      record.autoReconnect = canReconnectWithoutStoredSecrets(data);
       openSocket(record, msg.id, msg.encoding || 'utf-8');
+      if (pendingAuthenticationRecord === record) { closeReauthentication(false); }
       saveSessions();
     };
     xhr.send(data);
@@ -2371,6 +2634,7 @@
       port: data.get('port') || '22',
       group: groupId,
       displayName: reconnectInfo.sshConfigHost || reconnectInfo.hostname,
+      autoReconnect: canReconnectWithoutStoredSecrets(data),
       reconnectInfo: safeReconnectInfo(reconnectInfo)
     });
     record.reconnectData = cloneFormData(data);
@@ -2413,6 +2677,7 @@
       group: groupId,
       displayName: t('localTerminal'),
       isLocal: true,
+      autoReconnect: true,
       reconnectInfo: { type: 'local' }
     });
     var body = new window.URLSearchParams();
@@ -3018,8 +3283,31 @@
     connectTerminal(data);
   });
 
+  reauthForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var record = pendingAuthenticationRecord;
+    if (!record || !terminals[record.id]) {
+      closeReauthentication(false);
+      return;
+    }
+    var info = record.reconnectInfo || {};
+    var data = new window.FormData(reauthForm);
+    data.set('_xsrf', xsrfToken());
+    data.set('term', 'xterm-256color');
+    data.set('hostname', info.hostname || record.hostname);
+    data.set('username', info.username || record.username);
+    data.set('port', info.port || record.port || '22');
+    data.set('target_group', record.group);
+    data.set('ssh_config_host', info.sshConfigHost || '');
+    cleanData(data);
+    record.reconnectData = cloneFormData(data);
+    record.autoReconnect = canReconnectWithoutStoredSecrets(data);
+    reconnectTerminal(record, true);
+  });
+
   function openLogOverlay() {
     if (!closeUploadDialog(false)) { return; }
+    closeReauthentication(false);
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.add('is-open');
@@ -3033,6 +3321,7 @@
   }
 
   function runShortcutAction(actionId) {
+    if (reauthOverlay.classList.contains('is-open')) { closeReauthentication(false); }
     if (actionId === 'hostManager') {
       if (hostManagerOverlay.classList.contains('is-open')) { closeHostManager(); } else { openHostManager(); }
       return;
@@ -3068,6 +3357,15 @@
   openSelectedSshConfig.addEventListener('click', openSelectedSshConfigHosts);
   openHostManagerButton.addEventListener('click', openHostManager);
   openSystemSettingsButton.addEventListener('click', openSystemSettings);
+  closeReauthButton.addEventListener('click', function () { closeReauthentication(); });
+  cancelReauthButton.addEventListener('click', function () { closeReauthentication(); });
+  reauthOverlay.addEventListener('click', function (event) {
+    if (event.target === reauthOverlay) { closeReauthentication(); }
+  });
+  reauthPrivateKeyInput.addEventListener('change', function () {
+    reauthPrivateKeyName.textContent = reauthPrivateKeyInput.files.length ?
+      reauthPrivateKeyInput.files[0].name : t('noFileChosen');
+  });
   closeSystemSettingsButton.addEventListener('click', function () { closeSystemSettings(); });
   systemSettingsOverlay.addEventListener('click', function (event) {
     if (event.target === systemSettingsOverlay) { closeSystemSettings(); }
@@ -3182,6 +3480,10 @@
       runShortcutAction(shortcutAction.id);
       return;
     }
+    if (event.key === 'Tab' && reauthOverlay.classList.contains('is-open')) {
+      trapModalFocus(reauthOverlay, event);
+      return;
+    }
     if (event.key === 'Tab' && hostManagerOverlay.classList.contains('is-open')) {
       trapModalFocus(hostManagerOverlay, event);
       return;
@@ -3195,6 +3497,10 @@
       return;
     }
     if (event.key === 'Escape') {
+      if (reauthOverlay.classList.contains('is-open')) {
+        closeReauthentication();
+        return;
+      }
       if (fileUploadOverlay.classList.contains('is-open')) {
         closeUploadDialog();
         return;

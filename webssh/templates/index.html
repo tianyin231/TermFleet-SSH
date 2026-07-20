@@ -863,6 +863,61 @@
         box-shadow: var(--shadow-lg);
       }
 
+      .reauth-overlay {
+        z-index: 59;
+      }
+
+      .reauth-dialog {
+        width: min(560px, 100%);
+      }
+
+      .reauth-form {
+        display: grid;
+        gap: 16px;
+        min-height: 0;
+        padding: 18px;
+        overflow-y: auto;
+      }
+
+      .reauth-target {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        background: var(--panel-soft);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+      }
+
+      .reauth-target strong,
+      .reauth-target span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .reauth-target strong {
+        font-size: 14px;
+      }
+
+      .reauth-target span {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .reauth-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 14px;
+      }
+
+      .reauth-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding-top: 2px;
+      }
+
       .settings-head,
       .settings-section-head {
         display: flex;
@@ -1572,6 +1627,12 @@
         border-color: #c7d2fe;
       }
 
+      .group-tools button.is-active {
+        color: var(--primary-strong);
+        background: var(--primary-tint);
+        border-color: var(--primary);
+      }
+
       .group-resize-handle {
         position: absolute;
         right: 0;
@@ -1890,6 +1951,8 @@
 
       .terminal-placeholder {
         display: flex;
+        flex-direction: column;
+        gap: 10px;
         height: 100%;
         align-items: center;
         justify-content: center;
@@ -2085,6 +2148,10 @@
 
         .settings-overlay {
           padding: 10px;
+        }
+
+        .reauth-grid {
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .file-upload-overlay {
@@ -2447,6 +2514,50 @@
             <div class="shortcut-list" id="shortcut-settings-list"></div>
           </section>
         </div>
+      </section>
+    </div>
+    <div class="settings-overlay reauth-overlay" id="reauth-overlay" aria-labelledby="reauth-title" aria-modal="true" aria-hidden="true" role="dialog">
+      <section class="settings-dialog reauth-dialog">
+        <header class="settings-head">
+          <h2 id="reauth-title" data-i18n="reauthenticateSession">重新认证终端</h2>
+          <button class="btn btn-icon" type="button" id="close-reauth" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <form class="reauth-form" id="reauth-form" enctype="multipart/form-data">
+          <div class="reauth-target">
+            <strong id="reauth-target-name"></strong>
+            <span id="reauth-target-meta"></span>
+          </div>
+          <div class="field">
+            <label for="reauth-password" data-i18n="password">密码</label>
+            <input type="password" id="reauth-password" name="password" autocomplete="current-password">
+          </div>
+          <div class="field">
+            <label for="reauth-privatekey" data-i18n="privateKey">私钥</label>
+            <div class="file-picker">
+              <label class="btn btn-sm" for="reauth-privatekey" data-i18n="chooseFile">选择文件</label>
+              <span class="file-name" id="reauth-privatekey-name" data-i18n="noFileChosen">未选择文件</span>
+              <input type="file" id="reauth-privatekey" name="privatekey">
+            </div>
+          </div>
+          <div class="reauth-grid">
+            <div class="field">
+              <label for="reauth-passphrase" data-i18n="passphrase">私钥口令</label>
+              <input type="password" id="reauth-passphrase" name="passphrase">
+            </div>
+            <div class="field">
+              <label for="reauth-totp">TOTP</label>
+              <input type="password" inputmode="numeric" id="reauth-totp" name="totp">
+            </div>
+          </div>
+          <div class="reauth-actions">
+            <button class="btn btn-sm" type="button" id="cancel-reauth" data-i18n="cancel">取消</button>
+            <button class="btn btn-primary btn-sm" type="submit" id="submit-reauth" data-i18n="reauthenticate">重新认证</button>
+          </div>
+        </form>
       </section>
     </div>
     <div class="host-manager-overlay" id="host-manager-overlay" aria-labelledby="host-manager-title" aria-modal="true" aria-hidden="true" role="dialog">

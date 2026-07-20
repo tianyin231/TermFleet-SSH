@@ -1,6 +1,6 @@
 # TermFleet-SSH Project Map
 
-Verified against the repository on 2026-07-17. Re-check affected facts against source before relying on them.
+Verified against the repository on 2026-07-20. Re-check affected facts against source before relying on them.
 
 ## Product Scope
 
@@ -15,8 +15,9 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - per-group command and control-key broadcast;
 - single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
-- group create, rename, reorder, horizontal resize, fullscreen, delete, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
+- group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
 - restoration of server workers that survive a browser refresh;
+- browser-local pinned-group snapshots that recreate terminal cards after a backend restart, automatically reconnecting local or secret-free SSH descriptors and routing descriptors that used secrets through a dedicated authentication modal to reconnect the original card;
 - local settings, operation logs, and Chinese/English UI.
 
 This is a single-process application. There is no database, account system, durable server-side session store, frontend build step, or component framework.
@@ -113,10 +114,11 @@ Server terminal output is sent as binary frames. A newly bound socket replaces a
 5. A manual WebSocket close reason closes the worker, channel, SSH/local process, and registry entry.
 6. An incidental disconnect detaches the handler and schedules recycling after `max(options.delay, 30)` seconds.
 7. On page load, the browser intersects saved `wssh-sessions` with `/active-workers`, recreates cards, and rebinds surviving workers.
+8. The browser then fills any missing cards from pinned snapshots in `wssh-groups`. Local terminals and SSH descriptors that require no stored secret create new workers automatically; other SSH cards stop in an authentication-required state.
 
 Recycle callbacks are not tracked or canceled. A callback returns while a handler is attached, but a callback from an older detach can close a worker during a newer detached interval. Do not extend restoration by merely increasing `options.delay`: that option also controls recycling of newly created workers that never bind, and stale callbacks still exist.
 
-Restoration is therefore short-lived, per process, and keyed by client IP. It does not survive a server restart and is not a durable session feature. A reconnect creates a new backend worker; saved reconnect metadata excludes credentials and private-key data, so SSH reconnect may require current form credentials unless in-memory `reconnectData` still exists.
+Worker rebinding is short-lived, per process, and keyed by client IP; the workers themselves do not survive a server restart. Pinned groups add a separate browser-local, declarative restore path that creates replacement workers after restart when no saved secret is needed. A reconnect creates a new backend worker, and saved reconnect metadata excludes credentials and private-key data, so password, TOTP, uploaded-key, and passphrase sessions require re-authentication.
 
 ## Browser State
 
@@ -127,8 +129,10 @@ Restoration is therefore short-lived, per process, and keyed by client IP. It do
 | `wssh-language` | `zh` or `en` |
 | `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, and customizable toolbar shortcut bindings |
 | `wssh-operation-logs` | capped client-side operation log records |
-| `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, and manual-size flag; older layout records reset to the new default spans on restore |
-| `wssh-sessions` | worker ID, display metadata, group, height, local flag, last OSC 7 directory, and sanitized reconnect metadata |
+| `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, manual-size flag, pin state, and sanitized pinned-terminal snapshots; older layout records reset to the new default spans on restore |
+| `wssh-sessions` | worker ID, stable browser session ID, display metadata, group, height, local flag, last OSC 7 directory, safe auto-reconnect flag, and sanitized reconnect metadata |
+
+All browser state is JSON serialized by `localStorage`. Pinned snapshots never include passwords, TOTP values, uploaded private-key content, or passphrases. They are intentionally browser-local because the application has no accounts or authenticated ownership boundary; a server-side JSON workspace would otherwise be shared across users.
 
 The client-side maximum-terminal and upload-size settings are synchronized to process-wide backend `options.maxconn` and `options.maxupload`. They are not scoped to a user or browser. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
 

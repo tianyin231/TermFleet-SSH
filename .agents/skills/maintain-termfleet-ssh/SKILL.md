@@ -65,6 +65,7 @@ Supplement with `--domain ux` or `--domain web` for the affected interaction. Th
 - Preserve worker cleanup semantics. Manual close terminates the SSH/local process; incidental WebSocket loss detaches it temporarily so page restoration can rebind it.
 - Treat `clients` as sensitive shared state keyed by client IP. Changes to identity, proxies, multi-user behavior, or horizontal scaling require an explicit design decision.
 - Never persist or expose passwords, private-key bodies, passphrases, or TOTP values. Reconnect metadata intentionally excludes secrets.
+- Keep pinned-group restoration declarative and browser-local while the app has no authenticated user boundary. `wssh-groups` may persist sanitized terminal descriptors, but server-side JSON would be shared across users and must not be introduced without an ownership design. Automatically reconnect only local terminals and SSH descriptors that require no persisted secret; otherwise restore the card in an authentication-required state.
 - Preserve XSRF, origin, trusted-downstream, TLS redirect, and host-key policy behavior unless the task explicitly changes the security model.
 - Put live, user-facing runtime limits such as `maxconn` and `maxupload` in the system-settings workflow. Keep listener, TLS, proxy-trust, origin, host-key, and other startup/security options CLI-only unless authenticated administration and restart semantics are explicitly designed.
 - Keep Chinese and English UI text in sync. Update accessible labels and dynamic text as well as visible labels.
