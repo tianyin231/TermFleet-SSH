@@ -406,6 +406,7 @@
   }
 
   var DEFAULT_SHORTCUTS = {
+    connectServer: 'mod+shift+c',
     hostManager: 'mod+shift+h',
     systemSettings: 'mod+shift+,',
     operationLog: '',
@@ -414,6 +415,7 @@
   };
 
   var SHORTCUT_ACTIONS = [
+    { id: 'connectServer', labelKey: 'connectServer', buttonSelector: '.sidebar-rail' },
     { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
     { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
     { id: 'operationLog', labelKey: 'operationLog', buttonSelector: '#open-log' },
@@ -479,6 +481,7 @@
   var sshConfigSelectionAnchor = null;
   var groupLayoutObserver = null;
   var hostManagerPreviousFocus = null;
+  var connectionPreviousFocus = null;
   var systemSettingsPreviousFocus = null;
   var reauthPreviousFocus = null;
   var hostManagerGroupId = null;
@@ -496,6 +499,8 @@
   var summary = $('#fleet-summary');
   var groupSelect = $('#target-group');
   var connectForm = $('#connect');
+  var connectFormHome = connectForm.parentNode;
+  var connectFormNextSibling = connectForm.nextSibling;
   var connectButton = $('#connect-button');
   var toastStack = $('#toast-stack');
   var languageToggle = $('#language-toggle');
@@ -506,6 +511,10 @@
   var openSelectedSshConfig = $('#open-selected-ssh-config');
   var openSelectedSshConfigLabel = $('#open-selected-ssh-config-label');
   var openHostManagerButton = $('#open-host-manager');
+  var sidebarRail = $('.sidebar-rail');
+  var connectionOverlay = $('#connection-overlay');
+  var connectionDialogBody = $('#connection-dialog-body');
+  var closeConnectionButton = $('#close-connection');
   var openSystemSettingsButton = $('#open-system-settings');
   var closeSystemSettingsButton = $('#close-system-settings');
   var systemSettingsOverlay = $('#system-settings-overlay');
@@ -1672,10 +1681,35 @@
     }
   }
 
+  function openConnectionDialog() {
+    if (!closeUploadDialog(false)) { return; }
+    connectionPreviousFocus = modalReturnFocus(sidebarRail);
+    closeReauthentication(false);
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    connectionDialogBody.appendChild(connectForm);
+    connectionOverlay.classList.add('is-open');
+    connectionOverlay.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function () { $('#hostname').focus(); }, 0);
+  }
+
+  function closeConnectionDialog(restoreFocus) {
+    if (!connectionOverlay.classList.contains('is-open')) { return; }
+    connectionOverlay.classList.remove('is-open');
+    connectionOverlay.setAttribute('aria-hidden', 'true');
+    connectFormHome.insertBefore(connectForm, connectFormNextSibling);
+    if (restoreFocus !== false && connectionPreviousFocus && document.contains(connectionPreviousFocus)) {
+      connectionPreviousFocus.focus();
+    }
+    connectionPreviousFocus = null;
+  }
+
   function openHostManager() {
     if (!closeUploadDialog(false)) { return; }
     hostManagerPreviousFocus = modalReturnFocus(openHostManagerButton);
     closeReauthentication(false);
+    closeConnectionDialog(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
     if (groupById(groupSelect.value)) { hostManagerGroupId = groupSelect.value; }
@@ -1698,7 +1732,7 @@
 
   function modalReturnFocus(fallback) {
     var active = document.activeElement;
-    if (!active || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) ||
+    if (!active || connectionOverlay.contains(active) || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) ||
         reauthOverlay.contains(active) || fileUploadOverlay.contains(active) || logOverlay.contains(active)) {
       return fallback;
     }
@@ -1709,6 +1743,7 @@
     if (!closeUploadDialog(false)) { return; }
     systemSettingsPreviousFocus = modalReturnFocus(openSystemSettingsButton);
     closeReauthentication(false);
+    closeConnectionDialog(false);
     closeHostManager(false);
     logOverlay.classList.remove('is-open');
     renderShortcutSettings();
@@ -2230,7 +2265,7 @@
         } else if (candidateItems.length && candidateIndex > 0) {
           selectCandidate(candidateIndex - 1);
         } else {
-          openHistoryCandidates();
+          closeCandidates(true);
         }
       } else if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -2240,7 +2275,7 @@
         } else if (shellHistoryMode && candidateIndex < candidateItems.length - 1) {
           selectCandidate(candidateIndex + 1);
         } else if (shellHistoryMode && candidateIndex === candidateItems.length - 1) {
-          openLowerCandidates();
+          closeCandidates(true);
         } else if (candidateItems.length) {
           selectCandidate(Math.min(candidateItems.length - 1, candidateIndex + 1));
         }
@@ -2655,6 +2690,7 @@
     var info = record.reconnectInfo || {};
     reauthPreviousFocus = modalReturnFocus(record.card.querySelector('.reconnect-terminal'));
     pendingAuthenticationRecord = record;
+    closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
@@ -3168,6 +3204,7 @@
   }
 
   function openUploadDialog(file, records) {
+    closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
@@ -3634,6 +3671,7 @@
       toast(errors[0], 'error');
       return;
     }
+    closeConnectionDialog(false);
     connectTerminal(data);
   });
 
@@ -3662,6 +3700,7 @@
   function openLogOverlay() {
     if (!closeUploadDialog(false)) { return; }
     closeReauthentication(false);
+    closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.add('is-open');
@@ -3676,6 +3715,10 @@
 
   function runShortcutAction(actionId) {
     if (reauthOverlay.classList.contains('is-open')) { closeReauthentication(false); }
+    if (actionId === 'connectServer') {
+      if (connectionOverlay.classList.contains('is-open')) { closeConnectionDialog(); } else { openConnectionDialog(); }
+      return;
+    }
     if (actionId === 'hostManager') {
       if (hostManagerOverlay.classList.contains('is-open')) { closeHostManager(); } else { openHostManager(); }
       return;
@@ -3688,6 +3731,7 @@
       if (logOverlay.classList.contains('is-open')) { logOverlay.classList.remove('is-open'); } else { openLogOverlay(); }
       return;
     }
+    closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
     logOverlay.classList.remove('is-open');
@@ -3709,6 +3753,11 @@
     refreshSshConfigSelectionState();
   });
   openSelectedSshConfig.addEventListener('click', openSelectedSshConfigHosts);
+  sidebarRail.addEventListener('click', openConnectionDialog);
+  closeConnectionButton.addEventListener('click', function () { closeConnectionDialog(); });
+  connectionOverlay.addEventListener('click', function (event) {
+    if (event.target === connectionOverlay) { closeConnectionDialog(); }
+  });
   openHostManagerButton.addEventListener('click', openHostManager);
   openSystemSettingsButton.addEventListener('click', openSystemSettings);
   closeReauthButton.addEventListener('click', function () { closeReauthentication(); });
@@ -3800,10 +3849,6 @@
     applyLanguage();
   });
 
-  $('.sidebar-rail').addEventListener('click', function () {
-    $('#hostname').focus();
-  });
-
   $('.topbar-rail').addEventListener('click', function () {
     languageToggle.focus();
   });
@@ -3834,6 +3879,10 @@
       runShortcutAction(shortcutAction.id);
       return;
     }
+    if (event.key === 'Tab' && connectionOverlay.classList.contains('is-open')) {
+      trapModalFocus(connectionOverlay, event);
+      return;
+    }
     if (event.key === 'Tab' && reauthOverlay.classList.contains('is-open')) {
       trapModalFocus(reauthOverlay, event);
       return;
@@ -3851,6 +3900,10 @@
       return;
     }
     if (event.key === 'Escape') {
+      if (connectionOverlay.classList.contains('is-open')) {
+        closeConnectionDialog();
+        return;
+      }
       if (reauthOverlay.classList.contains('is-open')) {
         closeReauthentication();
         return;

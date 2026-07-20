@@ -863,6 +863,20 @@
         box-shadow: var(--shadow-lg);
       }
 
+      .connection-overlay {
+        z-index: 58;
+      }
+
+      .connection-dialog {
+        width: min(560px, 100%);
+      }
+
+      .connection-dialog-body {
+        min-height: 0;
+        padding: 18px;
+        overflow-y: auto;
+      }
+
       .reauth-overlay {
         z-index: 59;
       }
@@ -2516,6 +2530,19 @@
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
     <input type="file" id="file-upload-picker" hidden>
+    <div class="settings-overlay connection-overlay" id="connection-overlay" aria-labelledby="connection-title" aria-modal="true" aria-hidden="true" role="dialog">
+      <section class="settings-dialog connection-dialog">
+        <header class="settings-head">
+          <h2 id="connection-title" data-i18n="connectServer">连接服务器</h2>
+          <button class="btn btn-icon" type="button" id="close-connection" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="connection-dialog-body" id="connection-dialog-body"></div>
+      </section>
+    </div>
     <div class="file-upload-overlay" id="file-upload-overlay" aria-labelledby="file-upload-title" aria-modal="true" aria-hidden="true" role="dialog">
       <section class="file-upload-dialog">
         <header class="file-upload-head">

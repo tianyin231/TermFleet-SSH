@@ -7,12 +7,12 @@ Verified against the repository on 2026-07-20. Re-check affected facts against s
 TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It supports:
 
 - multiple xterm.js terminal cards grouped in horizontally resizable, reorderable work groups;
-- layered auto-collapsing top-toolbar and connection-sidebar controls, with full-edge invisible triggers, small centered overlay cues, and subtle slide/fade panels over the terminal workspace on pointer hover or keyboard focus;
+- layered auto-collapsing top-toolbar and connection-sidebar controls, with full-edge invisible triggers, small centered overlay cues, subtle slide/fade panels over the terminal workspace on pointer hover or keyboard focus, and a shared connection form that can move into a modal from the left cue or customizable Ctrl/Command+Shift+C shortcut;
 - SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
 - a top-right host manager opened by button or Ctrl/Command+Shift+H, with compact group switching, creation, and quick deletion, SSH-config hosts on the left, current-group terminals plus reconnect/maximize/close controls on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
 - a top-right system-settings modal for terminal and connection preferences plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
-- per-group command and control-key broadcast with fixed-slot scrolling history above the input, 30+ labeled read-only Linux candidates below it, Tab completion, and seamless Up/Down transitions using the original draft;
+- per-group command and control-key broadcast with fixed-slot scrolling history above the input, 30+ labeled read-only Linux candidates below it, Tab completion, and Up/Down transitions through the original-draft gap between the two candidate regions;
 - single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
 - group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, failed-terminal-only batch reconnect, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
