@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TermFleet-SSH</title>
+    <script>
+      try {
+        if (window.localStorage.getItem('wssh-theme') === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (error) {
+        // Keep the default light theme when browser storage is unavailable.
+      }
+    </script>
     <link href="static/img/favicon.png" rel="icon" type="image/png">
     <link href="static/css/xterm.min.css" rel="stylesheet" type="text/css">
     <link href="static/css/fullscreen.min.css" rel="stylesheet" type="text/css">
@@ -28,6 +37,8 @@
         --bg-top: #ffffff;
         --bg-mid: #f4f6fb;
         --bg-bottom: #e9edf6;
+        --bg-primary-glow: rgba(79, 70, 229, 0.1);
+        --bg-accent-glow: rgba(22, 163, 74, 0.08);
         --panel: rgba(255, 255, 255, 0.9);
         --panel-solid: #ffffff;
         --panel-soft: #f1f5f9;
@@ -38,6 +49,7 @@
         --line: #dce3ef;
         --line-strong: #cbd5e1;
         --primary: #4f46e5;
+        --primary-rgb: 79, 70, 229;
         --primary-strong: #3730a3;
         --primary-tint: #eef2ff;
         --accent: #16a34a;
@@ -46,6 +58,27 @@
         --danger: #dc2626;
         --danger-tint: #fef2f2;
         --warn: #d97706;
+        --on-primary: #ffffff;
+        --on-accent: #ffffff;
+        --on-danger: #ffffff;
+        --primary-hover-line: #c7d2fe;
+        --danger-line: #fecaca;
+        --rail-bg: rgba(255, 255, 255, 0.94);
+        --group-bg: rgba(255, 255, 255, 0.72);
+        --group-fullscreen-bg: rgba(255, 255, 255, 0.92);
+        --empty-bg: rgba(248, 250, 252, 0.7);
+        --selected-bg: #eff6ff;
+        --selected-line: #93c5fd;
+        --segment-bg: #f1f5f9;
+        --segment-line: #dbe3ee;
+        --segment-ink: #64748b;
+        --segment-hover-bg: rgba(255, 255, 255, 0.56);
+        --segment-hover-ink: #334155;
+        --segment-active-bg: #ffffff;
+        --segment-active-ink: #0f172a;
+        --segment-active-line: #e2e8f0;
+        --segment-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        --brand-end: #6366f1;
         --terminal: #0a0f1f;
         --terminal-head: #0f1729;
         --terminal-line: #1e293b;
@@ -58,6 +91,58 @@
         --sans: "Fira Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         --mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
         /* z-index scale: base 1, sidebar 20, topbar 30, drag 40, overlay 50, toast 60 */
+      }
+
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --bg-top: #0b1220;
+        --bg-mid: #080e1a;
+        --bg-bottom: #050914;
+        --bg-primary-glow: rgba(56, 189, 248, 0.1);
+        --bg-accent-glow: rgba(59, 130, 246, 0.08);
+        --panel: rgba(15, 23, 41, 0.94);
+        --panel-solid: #111827;
+        --panel-soft: #182235;
+        --ink: #e5edf8;
+        --ink-soft: #cbd5e1;
+        --muted: #a8b6c8;
+        --faint: #7d8da3;
+        --line: #25324a;
+        --line-strong: #3b4a63;
+        --primary: #60a5fa;
+        --primary-rgb: 96, 165, 250;
+        --primary-strong: #93c5fd;
+        --primary-tint: #172554;
+        --accent: #34d399;
+        --accent-strong: #6ee7b7;
+        --accent-tint: #12392f;
+        --danger: #dc2626;
+        --danger-tint: #3b1820;
+        --warn: #d97706;
+        --on-primary: #07111f;
+        --on-accent: #062117;
+        --on-danger: #ffffff;
+        --primary-hover-line: #3b82f6;
+        --danger-line: #7f1d1d;
+        --rail-bg: rgba(15, 23, 41, 0.97);
+        --group-bg: rgba(15, 23, 41, 0.88);
+        --group-fullscreen-bg: rgba(15, 23, 41, 0.97);
+        --empty-bg: rgba(7, 11, 22, 0.64);
+        --selected-bg: #172554;
+        --selected-line: #3b82f6;
+        --segment-bg: #0a0f1f;
+        --segment-line: #26344a;
+        --segment-ink: #94a3b8;
+        --segment-hover-bg: rgba(96, 165, 250, 0.08);
+        --segment-hover-ink: #dbeafe;
+        --segment-active-bg: #1e293b;
+        --segment-active-ink: #f8fafc;
+        --segment-active-line: #3b82f6;
+        --segment-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
+        --brand-end: #2563eb;
+        --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.24);
+        --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.32);
+        --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.46);
       }
 
       * {
@@ -75,14 +160,15 @@
         overflow: hidden;
         color: var(--ink);
         background:
-          radial-gradient(1200px 520px at 12% -8%, rgba(79, 70, 229, 0.1), transparent 60%),
-          radial-gradient(1000px 480px at 108% 4%, rgba(22, 163, 74, 0.08), transparent 55%),
+          radial-gradient(1200px 520px at 12% -8%, var(--bg-primary-glow), transparent 60%),
+          radial-gradient(1000px 480px at 108% 4%, var(--bg-accent-glow), transparent 55%),
           linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 46%, var(--bg-bottom) 100%);
         background-attachment: fixed;
         font-family: var(--sans);
         font-size: 16px;
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
+        transition: color 180ms ease, background-color 180ms ease;
       }
 
       button,
@@ -97,7 +183,7 @@
       }
 
       :focus-visible {
-        outline: 3px solid rgba(79, 70, 229, 0.32);
+        outline: 3px solid rgba(var(--primary-rgb), 0.32);
         outline-offset: 2px;
         border-radius: 6px;
       }
@@ -108,7 +194,7 @@
         left: 16px;
         z-index: 60;
         padding: 10px 14px;
-        color: #ffffff;
+        color: var(--on-primary);
         background: var(--primary);
         border-radius: var(--radius-sm);
         transition: top 180ms ease;
@@ -157,7 +243,7 @@
         left: 50%;
         width: 92px;
         height: 22px;
-        background: rgba(255, 255, 255, 0.94);
+        background: var(--rail-bg);
         border: 1px solid var(--line-strong);
         border-top: 0;
         border-radius: 0 0 9px 9px;
@@ -175,8 +261,8 @@
 
       .topbar-rail:hover::before {
         background: var(--primary-tint);
-        border-color: #c7d2fe;
-        box-shadow: 0 10px 26px rgba(79, 70, 229, 0.16);
+        border-color: var(--primary-hover-line);
+        box-shadow: 0 10px 26px rgba(var(--primary-rgb), 0.16);
         transform: translateX(-50%) translateY(2px);
       }
 
@@ -227,7 +313,7 @@
       }
 
       .topbar:focus-within .topbar-panel {
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.24), var(--shadow-md);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.24), var(--shadow-md);
       }
 
       .app-shell.panels-pinned .topbar {
@@ -265,10 +351,10 @@
         width: 44px;
         height: 44px;
         place-items: center;
-        color: #ffffff;
-        background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+        color: var(--on-primary);
+        background: linear-gradient(135deg, var(--primary) 0%, var(--brand-end) 100%);
         border-radius: 12px;
-        box-shadow: 0 8px 20px rgba(79, 70, 229, 0.32);
+        box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.32);
       }
 
       .brand h1 {
@@ -332,7 +418,7 @@
       .btn:hover {
         color: var(--primary-strong);
         background: var(--primary-tint);
-        border-color: #c7d2fe;
+        border-color: var(--primary-hover-line);
       }
 
       .btn:active {
@@ -340,27 +426,27 @@
       }
 
       .btn-primary {
-        color: #ffffff;
+        color: var(--on-primary);
         background: var(--primary);
         border-color: var(--primary);
-        box-shadow: 0 8px 18px rgba(79, 70, 229, 0.28);
+        box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.28);
       }
 
       .btn-primary:hover {
-        color: #ffffff;
+        color: var(--on-primary);
         background: var(--primary-strong);
         border-color: var(--primary-strong);
       }
 
       .btn-accent {
-        color: #ffffff;
+        color: var(--on-accent);
         background: var(--accent);
         border-color: var(--accent);
         box-shadow: 0 8px 18px rgba(22, 163, 74, 0.26);
       }
 
       .btn-accent:hover {
-        color: #ffffff;
+        color: var(--on-accent);
         background: var(--accent-strong);
         border-color: var(--accent-strong);
       }
@@ -368,11 +454,11 @@
       .btn-danger {
         color: var(--danger);
         background: var(--danger-tint);
-        border-color: #fecaca;
+        border-color: var(--danger-line);
       }
 
       .btn-danger:hover {
-        color: #ffffff;
+        color: var(--on-danger);
         background: var(--danger);
         border-color: var(--danger);
       }
@@ -390,6 +476,11 @@
 
       .btn-lang {
         min-width: 74px;
+      }
+
+      .btn-theme svg {
+        width: 19px;
+        height: 19px;
       }
 
       /* ---------- Main body ---------- */
@@ -433,7 +524,7 @@
         left: 0;
         width: 22px;
         height: 92px;
-        background: rgba(255, 255, 255, 0.94);
+        background: var(--rail-bg);
         border: 1px solid var(--line-strong);
         border-left: 0;
         border-radius: 0 9px 9px 0;
@@ -453,8 +544,8 @@
 
       .sidebar-rail:hover::before {
         background: var(--primary-tint);
-        border-color: #c7d2fe;
-        box-shadow: 0 10px 26px rgba(79, 70, 229, 0.16);
+        border-color: var(--primary-hover-line);
+        box-shadow: 0 10px 26px rgba(var(--primary-rgb), 0.16);
         transform: translateY(-50%) translateX(2px);
       }
 
@@ -506,7 +597,7 @@
       }
 
       .sidebar:focus-within .sidebar-panel {
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.24), var(--shadow-lg);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.24), var(--shadow-lg);
       }
 
       .app-shell.panels-pinned .body {
@@ -591,7 +682,7 @@
       .field select:focus {
         outline: none;
         border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.16);
       }
 
       .field input[type="file"] {
@@ -720,8 +811,8 @@
       }
 
       .ssh-host.is-selected {
-        background: #eff6ff;
-        border-color: #93c5fd;
+        background: var(--selected-bg);
+        border-color: var(--selected-line);
       }
 
       .ssh-host-copy {
@@ -1084,7 +1175,7 @@
       .shortcut-clear:hover:not(:disabled) {
         color: var(--danger);
         background: var(--danger-tint);
-        border-color: #fecaca;
+        border-color: var(--danger-line);
       }
 
       .shortcut-clear:disabled {
@@ -1236,7 +1327,7 @@
       .upload-path-field input:focus {
         outline: none;
         border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.14);
       }
 
       .upload-target-status.is-success {
@@ -1405,7 +1496,7 @@
       }
 
       .host-manager-group-delete:hover:not(:disabled) {
-        color: #ffffff;
+        color: var(--on-danger);
         background: var(--danger);
       }
 
@@ -1552,7 +1643,7 @@
         min-height: 0;
         max-width: none;
         align-self: stretch;
-        background: rgba(255, 255, 255, 0.72);
+        background: var(--group-bg);
         border: 1px solid var(--line);
         border-radius: var(--radius);
         box-shadow: var(--shadow-sm);
@@ -1564,7 +1655,7 @@
       .group-placeholder {
         height: 100%;
         min-height: 0;
-        background: rgba(79, 70, 229, 0.08);
+        background: rgba(var(--primary-rgb), 0.08);
         border: 2px dashed var(--primary);
         border-radius: var(--radius);
       }
@@ -1581,7 +1672,7 @@
 
       .group.drag-over {
         border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16), var(--shadow-md);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.16), var(--shadow-md);
       }
 
       .group.is-floating {
@@ -1648,9 +1739,9 @@
 
       .group-name:focus {
         outline: none;
-        background: #ffffff;
+        background: var(--panel-solid);
         border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.16);
         cursor: text;
       }
 
@@ -1683,7 +1774,7 @@
       .group-tools button:hover {
         color: var(--primary-strong);
         background: var(--primary-tint);
-        border-color: #c7d2fe;
+        border-color: var(--primary-hover-line);
       }
 
       .group-tools button.is-active {
@@ -1700,8 +1791,8 @@
         height: 32px;
         padding: 3px;
         gap: 2px;
-        background: #f1f5f9;
-        border: 1px solid #dbe3ee;
+        background: var(--segment-bg);
+        border: 1px solid var(--segment-line);
         border-radius: 9px;
       }
 
@@ -1710,7 +1801,7 @@
         width: auto;
         height: 24px;
         padding: 0 7px;
-        color: #64748b;
+        color: var(--segment-ink);
         background: transparent;
         border: 1px solid transparent;
         border-radius: 6px;
@@ -1722,17 +1813,17 @@
       }
 
       .group-tools .broadcast-scope-option:hover {
-        color: #334155;
-        background: rgba(255, 255, 255, 0.56);
+        color: var(--segment-hover-ink);
+        background: var(--segment-hover-bg);
         border-color: transparent;
       }
 
       .group-tools .broadcast-scope-option.is-active,
       .group-tools .broadcast-scope-option.is-active:hover {
-        color: #0f172a;
-        background: #ffffff;
-        border-color: #e2e8f0;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        color: var(--segment-active-ink);
+        background: var(--segment-active-bg);
+        border-color: var(--segment-active-line);
+        box-shadow: var(--segment-shadow);
       }
 
       .group-resize-handle {
@@ -1760,7 +1851,7 @@
       .group-tools button.danger-hover:hover {
         color: var(--danger);
         background: var(--danger-tint);
-        border-color: #fecaca;
+        border-color: var(--danger-line);
       }
 
       .broadcast {
@@ -1893,7 +1984,7 @@
         place-items: center;
         padding: 18px;
         color: var(--faint);
-        background: rgba(248, 250, 252, 0.7);
+        background: var(--empty-bg);
         border: 1px dashed var(--line-strong);
         border-radius: var(--radius-sm);
         text-align: center;
@@ -1939,7 +2030,7 @@
         height: 120px;
         border: 2px dashed var(--primary);
         border-radius: var(--radius-sm);
-        background: rgba(79, 70, 229, 0.08);
+        background: rgba(var(--primary-rgb), 0.08);
       }
 
       .terminal-header {
@@ -2101,7 +2192,7 @@
       }
 
       .host-session-tools button.close-btn:hover {
-        color: #ffffff;
+        color: var(--on-danger);
         background: var(--danger);
         border-color: var(--danger);
       }
@@ -2230,7 +2321,7 @@
         display: flex;
         flex: 1 1 100%;
         width: 100%;
-        background: rgba(255, 255, 255, 0.92);
+        background: var(--group-fullscreen-bg);
       }
 
       .app-shell.group-fullscreen .group.is-focused .terminal-list {
@@ -2521,6 +2612,11 @@
             </div>
           </div>
           <div class="top-actions">
+            <button class="btn btn-icon btn-theme" type="button" id="theme-toggle" aria-pressed="false" aria-label="切换到夜间主题" title="切换到夜间主题">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <button class="btn btn-lang" type="button" id="language-toggle" aria-label="切换语言" title="切换语言" data-i18n-title="toggleLanguage" data-i18n-aria-label="toggleLanguage">EN</button>
             <button class="btn" type="button" id="open-host-manager" aria-keyshortcuts="Control+Shift+H Meta+Shift+H" data-i18n-title="hostManager" data-i18n-aria-label="hostManager" title="主机管理" aria-label="主机管理">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">

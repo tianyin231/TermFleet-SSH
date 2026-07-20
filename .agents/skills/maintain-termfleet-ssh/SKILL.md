@@ -54,7 +54,7 @@ python3 .agents/skills/ui-ux-pro-max/scripts/search.py \
   --design-system -p "TermFleet-SSH"
 ```
 
-Supplement with `--domain ux` or `--domain web` for the affected interaction. This project uses plain HTML, CSS, and JavaScript: translate relevant guidance into the existing implementation, do not add Tailwind or a framework unless explicitly requested, and do not persist a generated design system unless it is part of the requested deliverable. Reject generic landing-page or hero recommendations that conflict with the dense operational workspace. Preserve the established light workspace, dark terminal surfaces, information density, keyboard access, and bilingual UI unless the task explicitly changes them.
+Supplement with `--domain ux` or `--domain web` for the affected interaction. This project uses plain HTML, CSS, and JavaScript: translate relevant guidance into the existing implementation, do not add Tailwind or a framework unless explicitly requested, and do not persist a generated design system unless it is part of the requested deliverable. Reject generic landing-page or hero recommendations that conflict with the dense operational workspace. Preserve the themeable workspace, dark terminal surfaces, information density, keyboard access, and bilingual UI unless the task explicitly changes them. Keep the dark workspace in the terminal's navy, blue, and cool-gray family, with surrounding panels slightly lighter than the terminal body. Workspace theme changes must not alter terminal CSS variables, `TERMINAL_THEME`, or xterm scrollbar colors unless the user explicitly requests a terminal palette change.
 
 ## Preserve Core Contracts
 

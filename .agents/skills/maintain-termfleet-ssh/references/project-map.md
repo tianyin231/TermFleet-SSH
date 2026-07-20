@@ -7,6 +7,7 @@ Verified against the repository on 2026-07-20. Re-check affected facts against s
 TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It supports:
 
 - multiple xterm.js terminal cards grouped in horizontally resizable, reorderable work groups;
+- a browser-persisted day/night workspace theme toggle that changes non-terminal surfaces while preserving the terminal and xterm palette;
 - layered top-toolbar and connection-sidebar controls that can auto-collapse into small overlay cues or remain persistently expanded through a saved customizable cross-platform shortcut, plus a shared connection form that can move into a modal from the left cue or Ctrl/Command+Shift+C;
 - SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
 - a top-right host manager opened by button or Ctrl/Command+Shift+H, with compact group switching, creation, and quick deletion, SSH-config hosts on the left, current-group terminals plus reconnect/maximize/close controls on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
@@ -127,6 +128,7 @@ Worker rebinding is short-lived, per process, and keyed by client IP; the worker
 | Key | Contents |
 | --- | --- |
 | `wssh-language` | `zh` or `en` |
+| `wssh-theme` | explicit `light` or `dark` workspace theme; terminal colors are not theme-dependent |
 | `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, persistent panel mode, and customizable toolbar shortcut bindings |
 | `wssh-operation-logs` | capped client-side operation log records |
 | `wssh-broadcast-history` | up to 100 deduplicated broadcast commands per group for local candidates and Up/Down navigation; removed with the group |

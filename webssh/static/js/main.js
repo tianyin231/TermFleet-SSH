@@ -1,5 +1,5 @@
 /* TermFleet-SSH
- * Light UI, dark terminals, draggable cards grouped into horizontal columns
+ * Themeable workspace, dark terminals, draggable cards grouped into horizontal columns
  * with per-group command broadcast. Terminal transport keeps the original
  * POST + WebSocket contract; file uploads use the Worker-scoped upload route.
  */
@@ -37,6 +37,8 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: '跳到终端列表',
       toggleLanguage: '切换语言',
+      switchToDarkTheme: '切换到夜间主题',
+      switchToLightTheme: '切换到日间主题',
       openToolbar: '展开工具栏',
       togglePersistentPanels: '切换顶栏和侧栏固定模式',
       panelsPinned: '顶栏和侧栏已固定展开。',
@@ -235,6 +237,8 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: 'Skip to terminals',
       toggleLanguage: 'Switch language',
+      switchToDarkTheme: 'Switch to dark theme',
+      switchToLightTheme: 'Switch to light theme',
       openToolbar: 'Expand toolbar',
       togglePersistentPanels: 'Toggle persistent toolbar and sidebar',
       panelsPinned: 'Toolbar and sidebar are now kept expanded.',
@@ -430,6 +434,7 @@
   };
 
   var currentLang = window.localStorage.getItem('wssh-language') || 'zh';
+  var currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 
   function t(key, data) {
     var text = (I18N[currentLang] && I18N[currentLang][key]) || I18N.zh[key] || key;
@@ -543,6 +548,7 @@
   var connectFormNextSibling = connectForm.nextSibling;
   var connectButton = $('#connect-button');
   var toastStack = $('#toast-stack');
+  var themeToggle = $('#theme-toggle');
   var languageToggle = $('#language-toggle');
   var sshConfigHostInput = $('#ssh-config-host');
   var sshConfigList = $('#ssh-config-list');
@@ -639,7 +645,9 @@
     selectActive: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     maximize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     minimize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4v3a2 2 0 0 1-2 2H4M15 4v3a2 2 0 0 0 2 2h3M9 20v-3a2 2 0 0 0-2-2H4M15 20v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    close: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+    close: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    moon: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sun: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   };
 
   // ---- Helpers -----------------------------------------------------------
@@ -1007,6 +1015,16 @@
     });
   }
 
+  function applyTheme() {
+    var isDark = currentTheme === 'dark';
+    var label = t(isDark ? 'switchToLightTheme' : 'switchToDarkTheme');
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    themeToggle.innerHTML = isDark ? ICONS.sun : ICONS.moon;
+    themeToggle.setAttribute('title', label);
+    themeToggle.setAttribute('aria-label', label);
+    themeToggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+  }
+
   function applyLanguage() {
     document.documentElement.lang = t('langCode');
     document.title = t('appTitle');
@@ -1042,6 +1060,7 @@
     if (!privateKeyInput.files.length) { privateKeyName.textContent = t('noFileChosen'); }
     updateSummary();
     setStatus(t('readyDetail'));
+    applyTheme();
   }
 
   function refreshDynamicLanguage() {
@@ -4064,6 +4083,12 @@
     currentLang = currentLang === 'zh' ? 'en' : 'zh';
     window.localStorage.setItem('wssh-language', currentLang);
     applyLanguage();
+  });
+
+  themeToggle.addEventListener('click', function () {
+    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    window.localStorage.setItem('wssh-theme', currentTheme);
+    applyTheme();
   });
 
   $('.topbar-rail').addEventListener('click', function () {
