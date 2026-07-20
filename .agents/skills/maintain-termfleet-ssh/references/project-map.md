@@ -15,7 +15,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - per-group command and control-key broadcast;
 - single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
-- group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
+- group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, failed-terminal-only batch reconnect, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
 - restoration of server workers that survive a browser refresh;
 - browser-local pinned-group snapshots that recreate terminal cards after a backend restart, automatically reconnecting local or secret-free SSH descriptors and routing descriptors that used secrets through a dedicated authentication modal to reconnect the original card;
 - local settings, operation logs, and Chinese/English UI.

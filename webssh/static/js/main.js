@@ -66,6 +66,9 @@
       removeGroup: '删除分组',
       pinGroup: '固定分组终端',
       unpinGroup: '取消固定分组终端',
+      reconnectFailedGroup: '重连本组失败终端',
+      noRetryableGroupTerminals: '{name} 中没有可直接重连的失败终端。',
+      reconnectingFailedGroup: '正在重连 {name} 中的 {count}。',
       groupPinned: '已固定 {name}，保存 {count}。',
       groupUnpinned: '已取消固定 {name}。',
       authenticationRequired: '需要重新认证',
@@ -168,6 +171,7 @@
       logUpload: '上传 {file} 到 {name}：{path}',
       logRenameTerminal: '终端重命名：{oldName} -> {newName}',
       logRenameGroup: '工作组重命名：{oldName} -> {newName}',
+      logReconnectFailedGroup: '批量重连 {name}：{count}',
       logSettings: '更新系统设置',
       logGroupFullscreen: '进入工作组全屏：{name}',
       logGroupFullscreenExit: '退出工作组全屏',
@@ -239,6 +243,9 @@
       removeGroup: 'Remove group',
       pinGroup: 'Pin group terminals',
       unpinGroup: 'Unpin group terminals',
+      reconnectFailedGroup: 'Reconnect failed terminals in this group',
+      noRetryableGroupTerminals: 'No failed terminals in {name} can be reconnected directly.',
+      reconnectingFailedGroup: 'Reconnecting {count} in {name}.',
       groupPinned: 'Pinned {name} with {count}.',
       groupUnpinned: 'Unpinned {name}.',
       authenticationRequired: 'Authentication required',
@@ -341,6 +348,7 @@
       logUpload: 'Upload {file} to {name}: {path}',
       logRenameTerminal: 'Rename terminal: {oldName} -> {newName}',
       logRenameGroup: 'Rename group: {oldName} -> {newName}',
+      logReconnectFailedGroup: 'Reconnect failed terminals in {name}: {count}',
       logSettings: 'Update system settings',
       logGroupFullscreen: 'Enter group fullscreen: {name}',
       logGroupFullscreenExit: 'Exit group fullscreen',
@@ -864,6 +872,7 @@
       var nameEl = column.querySelector('.group-name');
       var grip = column.querySelector('.group-grip');
       var pinBtn = column.querySelector('.pin-group');
+      var reconnectFailedBtn = column.querySelector('.group-reconnect-failed');
       var fullscreenBtn = column.querySelector('.group-fullscreen-btn');
       var deleteBtn = column.querySelector('.danger-hover');
       var input = column.querySelector('.broadcast input');
@@ -880,6 +889,10 @@
         deleteBtn.setAttribute('aria-label', t('removeGroup'));
       }
       if (pinBtn) { updateGroupPinButton(group, pinBtn); }
+      if (reconnectFailedBtn) {
+        reconnectFailedBtn.setAttribute('title', t('reconnectFailedGroup'));
+        reconnectFailedBtn.setAttribute('aria-label', t('reconnectFailedGroup'));
+      }
       if (fullscreenBtn) {
         fullscreenBtn.setAttribute('title', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
         fullscreenBtn.setAttribute('aria-label', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
@@ -1861,6 +1874,23 @@
     }
   }
 
+  function reconnectFailedGroup(group) {
+    var failed = terminalsInGroup(group.id).filter(function (record) {
+      if (record.state !== 'error' || record.stateKey === 'authenticationRequired') { return false; }
+      return record.isLocal || !!record.reconnectData || !!record.autoReconnect;
+    });
+    if (!failed.length) {
+      toast(t('noRetryableGroupTerminals', { name: group.name }));
+      return;
+    }
+    failed.forEach(function (record) { reconnectTerminal(record, false, true); });
+    var count = terminalCountText(failed.length);
+    var message = t('reconnectingFailedGroup', { name: group.name, count: count });
+    setStatus(message);
+    toast(message);
+    logAction('logReconnectFailedGroup', { name: group.name, count: count });
+  }
+
   function renderGroup(group) {
     var nameEl = el('span', {
       class: 'group-name',
@@ -1893,18 +1923,23 @@
       'aria-label': t(group.pinned ? 'unpinGroup' : 'pinGroup'),
       html: group.pinned ? ICONS.pinActive : ICONS.pin
     });
+    var reconnectFailedBtn = el('button', {
+      class: 'group-reconnect-failed', type: 'button',
+      title: t('reconnectFailedGroup'), 'aria-label': t('reconnectFailedGroup'), html: ICONS.reconnect
+    });
     var fullscreenBtn = el('button', {
       class: 'group-fullscreen-btn',
       type: 'button', title: t('groupFullscreen'),
       'aria-label': t('groupFullscreen'), html: ICONS.maximize
     });
     pinBtn.addEventListener('click', function () { toggleGroupPinned(group, pinBtn); });
+    reconnectFailedBtn.addEventListener('click', function () { reconnectFailedGroup(group); });
     fullscreenBtn.addEventListener('click', function () { toggleGroupFullscreen(group.id, fullscreenBtn); });
     deleteBtn.addEventListener('click', function () { removeGroup(group.id); });
 
     var head = el('div', { class: 'group-head' }, [
       grip, title,
-      el('div', { class: 'group-tools' }, [pinBtn, fullscreenBtn, deleteBtn])
+      el('div', { class: 'group-tools' }, [pinBtn, reconnectFailedBtn, fullscreenBtn, deleteBtn])
     ]);
 
     // Broadcast bar.
@@ -2331,7 +2366,7 @@
     reauthPreviousFocus = null;
   }
 
-  function reconnectTerminal(record, credentialsReady) {
+  function reconnectTerminal(record, credentialsReady, quiet) {
     if (!record || record.state === 'connecting') { return; }
     if (!credentialsReady && (record.stateKey === 'authenticationRequired' || pendingAuthenticationRecord === record)) {
       beginReauthentication(record);
@@ -2356,11 +2391,11 @@
     record.osc7Buffer = '';
     setCardState(record, 'connecting', null, 'connecting');
     resetTerminalView(record, t('establishing'));
-    toast(t('reconnectingTerminal', { name: record.displayName || record.hostname }));
+    if (!quiet) { toast(t('reconnectingTerminal', { name: record.displayName || record.hostname })); }
     if (info.type === 'local') {
       reconnectLocalTerminal(record);
     } else {
-      reconnectSshTerminal(record, info);
+      reconnectSshTerminal(record, info, record.autoReconnect && !record.reconnectData);
     }
   }
 
