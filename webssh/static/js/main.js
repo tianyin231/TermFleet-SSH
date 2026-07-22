@@ -89,16 +89,16 @@
       broadcastLabel: '向 {name} 广播命令',
       broadcastSelectedLabel: '向 {name} 中已选的 {count} 广播命令',
       broadcastSelectionSummary: '{total} · 已选 {selected}',
-      selectForBroadcast: '选择 {name} 用于部分广播',
+      selectForBroadcast: '选择 {name} 用于已选范围操作',
       unselectForBroadcast: '取消选择 {name}',
-      toggleBroadcastScope: '切换当前分组广播范围',
+      toggleBroadcastScope: '切换当前分组的消息和文件范围',
       broadcastScopeAll: '全部',
       broadcastScopeSelected: '已选',
-      broadcastScopeAllLabel: '广播范围：全部终端；点击切换为已选终端',
-      broadcastScopeSelectedLabel: '广播范围：已选终端；点击切换为全部终端',
-      broadcastScopeAllToast: '{name} 将向全部终端广播。',
-      broadcastScopeSelectedToast: '{name} 将只向已选终端广播。',
-      noSelectedBroadcastTargets: '{name} 处于已选广播模式，请先选择终端。',
+      broadcastScopeAllLabel: '消息和文件范围：全部终端；点击切换为已选终端',
+      broadcastScopeSelectedLabel: '消息和文件范围：已选终端；点击切换为全部终端',
+      broadcastScopeAllToast: '{name} 的消息和文件将发送到全部终端。',
+      broadcastScopeSelectedToast: '{name} 的消息和文件将只发送到已选终端。',
+      noSelectedBroadcastTargets: '{name} 当前使用已选范围，请先选择终端。',
       uploadFile: '上传文件',
       uploadToGroup: '向分组上传文件',
       fileUpload: '文件上传',
@@ -120,6 +120,7 @@
       uploadPartial: '{file}：成功 {success} 个，失败 {failed} 个。',
       uploadCancelled: '上传已取消。',
       noUploadTargets: '没有可上传文件的已连接终端。',
+      noSelectedUploadTargets: '{name} 当前使用已选范围，请先选择终端再上传。',
       invalidUploadDirectory: '目标目录必须是绝对路径。',
       send: '发送',
       defaultGroup: '分组 {number}',
@@ -289,16 +290,16 @@
       broadcastLabel: 'Broadcast command to {name}',
       broadcastSelectedLabel: 'Broadcast command to selected {count} in {name}',
       broadcastSelectionSummary: '{total} · {selected} selected',
-      selectForBroadcast: 'Select {name} for partial broadcast',
+      selectForBroadcast: 'Select {name} for selected-scope actions',
       unselectForBroadcast: 'Deselect {name}',
-      toggleBroadcastScope: 'Toggle current group broadcast scope',
+      toggleBroadcastScope: 'Toggle the message and file scope for the current group',
       broadcastScopeAll: 'All',
       broadcastScopeSelected: 'Selected',
-      broadcastScopeAllLabel: 'Broadcast scope: all terminals; activate for selected terminals',
-      broadcastScopeSelectedLabel: 'Broadcast scope: selected terminals; activate for all terminals',
-      broadcastScopeAllToast: '{name} will broadcast to all terminals.',
-      broadcastScopeSelectedToast: '{name} will broadcast only to selected terminals.',
-      noSelectedBroadcastTargets: '{name} is in selected broadcast mode. Select at least one terminal.',
+      broadcastScopeAllLabel: 'Message and file scope: all terminals; activate for selected terminals',
+      broadcastScopeSelectedLabel: 'Message and file scope: selected terminals; activate for all terminals',
+      broadcastScopeAllToast: '{name} will send messages and files to all terminals.',
+      broadcastScopeSelectedToast: '{name} will send messages and files only to selected terminals.',
+      noSelectedBroadcastTargets: '{name} is using selected scope. Select at least one terminal.',
       uploadFile: 'Upload file',
       uploadToGroup: 'Upload file to group',
       fileUpload: 'File upload',
@@ -320,6 +321,7 @@
       uploadPartial: '{file}: {success} succeeded, {failed} failed.',
       uploadCancelled: 'Upload cancelled.',
       noUploadTargets: 'No connected terminals are available for upload.',
+      noSelectedUploadTargets: '{name} is using selected scope. Select at least one terminal before uploading.',
       invalidUploadDirectory: 'Target directories must be absolute paths.',
       send: 'Send',
       defaultGroup: 'Group {number}',
@@ -2524,7 +2526,12 @@
       shortcutSelect.value = '';
     });
     uploadBtn.addEventListener('click', function () {
-      chooseUploadFile(terminalsInGroup(group.id), uploadBtn);
+      var records = broadcastRecipients(group.id);
+      if (group.broadcastSelectedOnly && !records.length) {
+        toast(t('noSelectedUploadTargets', { name: group.name }), 'error');
+        return;
+      }
+      chooseUploadFile(records, uploadBtn);
     });
 
     var list = el('div', { class: 'terminal-list', dataset: { list: group.id } });

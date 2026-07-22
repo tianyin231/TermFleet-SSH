@@ -16,6 +16,16 @@ description: Navigate, diagnose, review, test, and safely evolve the TermFleet-S
 
 Keep changes surgical. This repository contains a large, framework-free frontend and a stateful terminal backend; prefer the minimum coherent change over speculative abstraction.
 
+## Leave All Verification to the User
+
+The user exclusively owns verification and acceptance in this repository. This rule overrides any verification instruction elsewhere in this skill, its references, the UI/UX skill, or the general workflow.
+
+- Never start, restart, or connect to the application, a development server, a test server, a preview server, or a container for verification. Do not reuse an already-running service to inspect behavior.
+- Never run tests, linters, formatters in check mode, syntax or type checks, builds, smoke tests, health checks, HTTP/WebSocket probes, browser automation, screenshots, or manual functional checks.
+- Source inspection, CodeGraph navigation, and Git status/diff review remain allowed for understanding scope and protecting unrelated changes, but they are not evidence that the implementation works.
+- Add or update focused tests when the change warrants them, but do not execute those tests.
+- At handoff, give the user the exact commands and functional scenarios they should verify, state clearly that verification was not run, and never claim that tests pass or behavior was verified.
+
 ## Trace the Change End to End
 
 Identify every affected layer before editing:
@@ -65,7 +75,7 @@ Supplement with `--domain ux` or `--domain web` for the affected interaction. Th
 - Preserve worker cleanup semantics. Register workers through the canonical per-IP map after asynchronous connection setup; never retain a fallback `clients[ip]` dictionary across a `yield`. Each Worker owns one generation-guarded recycle timeout: binding or closing cancels it, while incidental WebSocket loss replaces it with the detach grace period so page restoration can rebind. Manual close terminates the SSH/local process, and registry cleanup remains identity-aware and idempotent even when transport close raises.
 - Treat `clients` as sensitive shared state keyed by client IP. Changes to identity, proxies, multi-user behavior, or horizontal scaling require an explicit design decision.
 - Never persist or expose passwords, private-key bodies, passphrases, or TOTP values. Reconnect metadata intentionally excludes secrets.
-- Treat broadcast commands as potentially sensitive. Keep command history browser-local, bounded, and scoped by group. Keep partial-broadcast selection and scope browser-local, persisted, and group-scoped: store only boolean scope/selection state in the existing group and session records, use the selected subset only while that group's explicit scope control is in selected mode, and block zero selections rather than falling back to the whole group. An explicit empty submit broadcasts one Enter control sequence without adding a history record. Group upload remains a separate whole-group action. Built-in candidates must remain read-only diagnostic commands, and neither history nor common candidates may be sent until the user explicitly broadcasts the selected command.
+- Treat broadcast commands as potentially sensitive. Keep command history browser-local, bounded, and scoped by group. Keep terminal selection and operation scope browser-local, persisted, and group-scoped: store only boolean scope/selection state in the existing group and session records, apply the selected subset to both broadcasts and group uploads only while that group's explicit scope control is in selected mode, and block zero selections rather than falling back to the whole group. An explicit empty submit broadcasts one Enter control sequence without adding a history record. Built-in candidates must remain read-only diagnostic commands, and neither history nor common candidates may be sent until the user explicitly broadcasts the selected command.
 - Keep pinned-group restoration declarative and browser-local while the app has no authenticated user boundary. `wssh-groups` may persist sanitized terminal descriptors, but server-side JSON would be shared across users and must not be introduced without an ownership design. Automatically reconnect only local terminals and SSH descriptors that require no persisted secret; otherwise restore the card in an authentication-required state.
 - Preserve XSRF, origin, trusted-downstream, TLS redirect, and host-key policy behavior unless the task explicitly changes the security model.
 - Put live, user-facing runtime limits such as `maxconn` and `maxupload` in the system-settings workflow. Keep listener, TLS, proxy-trust, origin, host-key, and other startup/security options CLI-only unless authenticated administration and restart semantics are explicitly designed.
@@ -76,13 +86,13 @@ Supplement with `--domain ux` or `--domain web` for the affected interaction. Th
 
 For backend changes, add or update focused tests first when practical. Cover invalid input, ownership, resource cleanup, and the HTTP/WebSocket boundary. Avoid blocking the Tornado IOLoop with SSH work; existing SSH connection setup runs in `IndexHandler.executor`.
 
-For frontend changes, follow the existing plain JavaScript and DOM-helper style unless a framework migration is explicitly requested. Keep state transitions centralized through existing helpers. Verify xterm fitting after any layout change and preserve stable terminal/card dimensions. Use a real browser to inspect the affected state at 375px, 768px, 1024px, and 1440px when responsive behavior is in scope.
+For frontend changes, follow the existing plain JavaScript and DOM-helper style unless a framework migration is explicitly requested. Keep state transitions centralized through existing helpers and preserve stable terminal/card dimensions. For layout or responsive changes, give the user xterm fitting and browser inspection steps covering 375px, 768px, 1024px, and 1440px; do not perform those checks yourself.
 
 For broad redesigns or migrations, establish the replacement boundary and migration sequence before editing. Do not silently maintain two architectures. Record intentional compatibility behavior and remove only code made obsolete by the requested change.
 
 ## Hand Off for User Acceptance
 
-After implementation, summarize the changed behavior, affected files, known limitations, and how the user can exercise the result. The user owns product acceptance. Do not run functional acceptance checks or claim that the result is accepted unless the user explicitly asks for those checks.
+After implementation, summarize the changed behavior, affected files, known limitations, and how the user can exercise and verify the result. The user owns all verification and product acceptance; do not perform verification even when preparing the handoff.
 
 Leave the implementation uncommitted and unpushed while acceptance is pending. Wait for an explicit user instruction such as "验收通过" or "可以推送" before publishing it. A request to inspect, explain, or revise the result is not approval to commit or push.
 

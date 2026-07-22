@@ -14,7 +14,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - a top-right system-settings modal for terminal and connection preferences plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
 - whole-group or browser-persisted selected-terminal command and control-key broadcast, controlled by a per-group All/Selected segmented control and customizable Ctrl/Command+Alt/Option+S shortcut, with persisted group scope and terminal selections, empty-submit Enter without history, explicit card/count/input scope feedback, zero-selection blocking, fixed-slot scrolling history above the input, 30+ labeled read-only Linux candidates below it, Tab completion, and Up/Down transitions through the original-draft gap between the two candidate regions;
-- single-terminal and per-group file upload with per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, and explicit overwrite consent;
+- single-terminal and per-group file upload, with group uploads following the same persisted All/Selected terminal scope as broadcasts, plus per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, zero-selection blocking, and explicit overwrite consent;
 - terminal rename, reconnect, move, resize, maximize, close, and latency display;
 - group create, rename, reorder, horizontal resize, fullscreen, delete, pinning, failed-terminal-only batch reconnect, and layout persistence, with a repeating full-height half-screen plus two vertically stacked quarter-area groups and half-viewport paging;
 - restoration of server workers that survive a browser refresh;
@@ -68,6 +68,7 @@ Worker -> PTYChannel -> server-local shell process
 - MCP configuration exists in `.mcp.json`, `.cursor/mcp.json`, and `opencode.jsonc`; `.claude/settings.json` allows the CodeGraph MCP methods. A given client session may still lack the MCP tools, in which case use the CLI.
 - Use CodeGraph for symbol discovery, source-plus-call-path exploration, callers/callees, impact analysis, and affected-test suggestions. Verify its output with `rg` and source reads: after the current index rebuild, `impact WsockHandler` found relevant handler tests, while `affected webssh/handler.py` still reported no affected tests.
 - Run `codegraph sync .` after source changes. Rebuild with `codegraph index .` when an older index schema causes query failures; the generated database is ignored by `.codegraph/.gitignore`.
+- All test, lint, build, syntax, server, browser, and functional verification is user-run. The agent may recommend commands and scenarios but must not execute them, start a service for verification, or claim that behavior was verified.
 
 ## Git Topology
 
@@ -154,7 +155,7 @@ The client-side maximum-terminal and upload-size settings are synchronized to pr
 
 ## Verification and Current Gaps
 
-Preferred existing commands:
+Preferred user-run commands (the agent must not execute them):
 
 ```bash
 node --check webssh/static/js/main.js
@@ -174,7 +175,7 @@ Coverage is strongest for inherited SSH authentication, request validation, poli
 - authorization implications of local shells and global settings;
 - multiple app processes or multiple users behind one IP.
 
-Add focused tests around the changed behavior instead of relying only on the inherited backend suite. Use real-browser verification for frontend and lifecycle changes.
+Add focused tests around the changed behavior instead of relying only on the inherited backend suite, then ask the user to run them. Give the user real-browser verification steps for frontend and lifecycle changes; the agent must not perform those checks.
 
 ## Deployment
 
