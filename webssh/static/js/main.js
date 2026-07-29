@@ -1945,7 +1945,7 @@
     var total = countInGroup(groupId);
     var selectedOnly = !!group.broadcastSelectedOnly;
     var meta = column.querySelector('.group-meta');
-    var input = column.querySelector('.broadcast input');
+    var input = column.querySelector('.broadcast textarea');
     if (meta) {
       meta.textContent = selected ? t('broadcastSelectionSummary', {
         total: terminalCountText(total), selected: terminalCountText(selected)
@@ -2287,8 +2287,8 @@
 
     // Broadcast bar.
     var historyListId = 'broadcast-history-' + group.id;
-    var input = el('input', {
-      type: 'text', autocomplete: 'off', spellcheck: 'false',
+    var input = el('textarea', {
+      rows: '1', wrap: 'off', autocomplete: 'off', spellcheck: 'false',
       placeholder: t('broadcastPlaceholder'),
       role: 'combobox', 'aria-autocomplete': 'list', 'aria-haspopup': 'listbox',
       'aria-controls': historyListId, 'aria-expanded': 'false',
@@ -2303,6 +2303,13 @@
     var candidateIndex = -1;
     var historyDraft = '';
     var shellHistoryMode = false;
+
+    function resizeBroadcastInput() {
+      input.style.height = 'auto';
+      var scrollHeight = input.scrollHeight;
+      input.style.height = Math.max(40, Math.min(106, scrollHeight)) + 'px';
+      input.style.overflowY = scrollHeight > 106 ? 'auto' : 'hidden';
+    }
 
     function closeCandidatesOnScroll(event) {
       if (historyList.contains(event.target)) { return; }
@@ -2333,7 +2340,10 @@
     }
 
     function closeCandidates(restoreDraft) {
-      if (restoreDraft) { input.value = historyDraft; }
+      if (restoreDraft) {
+        input.value = historyDraft;
+        resizeBroadcastInput();
+      }
       window.removeEventListener('resize', closeCandidatesOnResize);
       window.removeEventListener('scroll', closeCandidatesOnScroll, true);
       historyList.hidden = true;
@@ -2351,6 +2361,7 @@
     function selectCandidate(index) {
       candidateIndex = index;
       input.value = candidateItems[index].command;
+      resizeBroadcastInput();
       var options = historyList.querySelectorAll('[role="option"]');
       options.forEach(function (option, optionIndex) {
         var active = optionIndex === index;
@@ -2370,6 +2381,7 @@
 
     function acceptCandidate(index) {
       input.value = candidateItems[index].command;
+      resizeBroadcastInput();
       historyDraft = input.value;
       closeCandidates(false);
       input.focus();
@@ -2446,11 +2458,20 @@
 
     input.addEventListener('input', function () {
       historyDraft = input.value;
+      resizeBroadcastInput();
       renderCandidates(input.value, false, true, false);
     });
     input.addEventListener('keydown', function (event) {
-      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) { return; }
-      if (event.key === 'ArrowUp') {
+      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) { return; }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendBtn.click();
+      } else if (event.shiftKey) {
+        return;
+      } else if (input.value.indexOf('\n') !== -1 && historyList.hidden &&
+          (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        return;
+      } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         if (historyList.hidden) {
           historyDraft = input.value;
@@ -2517,6 +2538,7 @@
       if (hasCommand) { rememberBroadcastCommand(group.id, value); }
       closeCandidates(false);
       input.value = '';
+      resizeBroadcastInput();
       historyDraft = '';
       input.focus();
     });
