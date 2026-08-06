@@ -961,7 +961,7 @@
   function rememberBroadcastCommand(groupId, command) {
     var value = String(command || '').replace(/\s+$/, '');
     if (!value.trim() || value.length > 4096) { return; }
-    var history = (broadcastHistory[groupId] || []).filter(function (item) { return item !== value; });
+    var history = (broadcastHistory[groupId] || []).filter(function (item) { return item.toLowerCase() !== value.toLowerCase(); });
     history.unshift(value);
     broadcastHistory[groupId] = history.slice(0, BROADCAST_HISTORY_LIMIT);
     saveBroadcastHistory();
