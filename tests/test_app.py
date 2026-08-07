@@ -1,5 +1,8 @@
 import json
+import os
 import random
+import shutil
+import tempfile
 import threading
 import tornado.websocket
 import tornado.gen
@@ -10,9 +13,11 @@ from tornado.options import options
 from tests.sshserver import run_ssh_server, banner, Server
 from tests.utils import encode_multipart_formdata, read_file, make_tests_data_path  # noqa
 from webssh import handler
+from webssh import settings as ws_settings
 from webssh.main import make_app, make_handlers
 from webssh.settings import (
-    get_app_settings, get_server_settings, max_body_size
+    get_app_settings, get_server_settings, max_body_size,
+    load_system_settings, save_system_settings
 )
 from webssh.utils import to_str
 from webssh.worker import clients
@@ -797,6 +802,65 @@ class TestAppWithTooManyConnections(OtherTestBase):
         finally:
             for worker_ in list(workers.values()):
                 worker_.close(reason='test cleanup')
+
+
+class TestSystemSettingsPersistence(OtherTestBase):
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_settings_path = ws_settings.system_settings_path
+        ws_settings.system_settings_path = os.path.join(
+            self.temp_dir, 'system-settings.json'
+        )
+        super(TestSystemSettingsPersistence, self).setUp()
+
+    def tearDown(self):
+        ws_settings.system_settings_path = self.original_settings_path
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        super(TestSystemSettingsPersistence, self).tearDown()
+
+    @tornado.testing.gen_test
+    def test_save_system_settings_persists_to_file(self):
+        body = {'maxconn': '100', 'maxupload': '200', '_xsrf': 'yummy'}
+        response = yield self.async_post('/system-settings', body)
+        self.assertEqual(response.code, 200)
+        data = json.loads(to_str(response.body))
+        self.assertEqual(data, {'maxconn': 100, 'maxupload': 200})
+        with open(ws_settings.system_settings_path) as fp:
+            saved = json.load(fp)
+        self.assertEqual(saved, {'maxconn': 100, 'maxupload': 200})
+
+    def test_load_system_settings_applies_saved_values(self):
+        save_system_settings(100, 200)
+        options.maxconn = 20
+        options.maxupload = 100
+        load_system_settings()
+        self.assertEqual(options.maxconn, 100)
+        self.assertEqual(options.maxupload, 200)
+
+    def test_load_system_settings_ignores_corrupt_file(self):
+        with open(ws_settings.system_settings_path, 'w') as fp:
+            fp.write('{not json')
+        options.maxconn = 20
+        options.maxupload = 100
+        load_system_settings()
+        self.assertEqual(options.maxconn, 20)
+        self.assertEqual(options.maxupload, 100)
+
+    def test_load_system_settings_ignores_invalid_values(self):
+        save_system_settings(0, 50000)
+        options.maxconn = 20
+        options.maxupload = 100
+        load_system_settings()
+        self.assertEqual(options.maxconn, 20)
+        self.assertEqual(options.maxupload, 100)
+
+    def test_load_system_settings_without_file_keeps_defaults(self):
+        options.maxconn = 20
+        options.maxupload = 100
+        load_system_settings()
+        self.assertEqual(options.maxconn, 20)
+        self.assertEqual(options.maxupload, 100)
 
 
 class TestAppWithCrossOriginOperation(OtherTestBase):

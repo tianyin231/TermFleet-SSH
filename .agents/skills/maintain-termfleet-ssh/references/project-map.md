@@ -88,7 +88,7 @@ Worker -> PTYChannel -> server-local shell process
 | `/` | POST | Accept SSH form fields, create a Worker with supported temporary directory tracking, and return `{id, status, encoding}`; handled errors intentionally return HTTP 200 with `status` |
 | `/ssh-config` | GET | Return `{path, hosts}`; hosts contain alias, hostname, username, port, and `has_identity_file` only |
 | `/system-settings` | GET | Return process-wide `{maxconn, maxupload}` |
-| `/system-settings` | POST | Validate `maxconn` in 1..500 and `maxupload` in 1..10240 MiB, then mutate both running process options |
+| `/system-settings` | POST | Validate `maxconn` in 1..500 and `maxupload` in 1..10240 MiB, then mutate both running process options and persist them to `system-settings.json` next to the package root |
 | `/active-workers` | GET | Return live worker IDs for the resolved client IP as `{ids}` |
 | `/local-terminal` | POST | Create the server user's shell PTY, install supported temporary directory tracking, and return `{id, status, encoding}` |
 | `/upload?id=...` | GET | Resolve the Worker upload directory as `{path, tracked, local}`; uses OSC 7 state or the SSH home/local startup directory fallback |
@@ -139,7 +139,7 @@ Worker rebinding is short-lived, per process, and keyed by client IP; the worker
 
 All browser state is JSON serialized by `localStorage`. Pinned snapshots never include passwords, TOTP values, uploaded private-key content, or passphrases. They are intentionally browser-local because the application has no accounts or authenticated ownership boundary; a server-side JSON workspace would otherwise be shared across users.
 
-The client-side maximum-terminal and upload-size settings are synchronized to process-wide backend `options.maxconn` and `options.maxupload`. They are not scoped to a user or browser. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
+The client-side maximum-terminal and upload-size settings are synchronized to process-wide backend `options.maxconn` and `options.maxupload`. They are not scoped to a user or browser. `POST /system-settings` also writes them to `system-settings.json` (git-ignored, atomic validity-checked on load at startup, ignored when corrupt), so a server restart keeps the last saved values; the saved file takes precedence over CLI defaults because it represents the last UI save, mirroring how the UI already overrides CLI values at runtime. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
 
 ## Security and Ownership Invariants
 

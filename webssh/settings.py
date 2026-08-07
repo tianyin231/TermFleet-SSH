@@ -1,9 +1,10 @@
+import json
 import logging
-import os.path
+import os
 import ssl
 import sys
 
-from tornado.options import define
+from tornado.options import define, options
 from webssh.policy import (
     load_host_keys, get_policy_class, check_policy_setting
 )
@@ -62,6 +63,42 @@ define('version', type=bool, help='Show version information',
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 font_dirs = ['webssh', 'static', 'css', 'fonts']
 max_body_size = 1 * 1024 * 1024
+system_settings_path = os.path.join(base_dir, 'system-settings.json')
+
+
+def save_system_settings(maxconn, maxupload):
+    with open(system_settings_path, 'w') as fp:
+        json.dump({'maxconn': maxconn, 'maxupload': maxupload}, fp)
+
+
+def load_system_settings():
+    if not os.path.isfile(system_settings_path):
+        return
+    try:
+        with open(system_settings_path) as fp:
+            data = json.load(fp)
+    except (OSError, ValueError):
+        logging.warning(
+            'Failed to load system settings from {}'.format(
+                system_settings_path
+            ), exc_info=True
+        )
+        return
+    maxconn = data.get('maxconn')
+    maxupload = data.get('maxupload')
+    if (isinstance(maxconn, int) and 1 <= maxconn <= 500 and
+            isinstance(maxupload, int) and 1 <= maxupload <= 10240):
+        options.maxconn = maxconn
+        options.maxupload = maxupload
+        logging.info(
+            'Loaded system settings: maxconn={}, maxupload={}'.format(
+                maxconn, maxupload
+            )
+        )
+    else:
+        logging.warning(
+            'Invalid system settings in {}'.format(system_settings_path)
+        )
 
 
 class Font(object):

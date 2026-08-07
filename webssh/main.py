@@ -10,8 +10,9 @@ from webssh.handler import (
     NotFoundHandler
 )
 from webssh.settings import (
-    get_app_settings,  get_host_keys_settings, get_policy_setting,
-    get_ssl_context, get_server_settings, check_encoding_setting
+    get_app_settings, get_host_keys_settings, get_policy_setting,
+    get_ssl_context, get_server_settings, check_encoding_setting,
+    load_system_settings
 )
 
 
@@ -52,6 +53,7 @@ def app_listen(app, port, address, server_settings):
 def main():
     options.parse_command_line()
     check_encoding_setting(options.encoding)
+    load_system_settings()
     loop = tornado.ioloop.IOLoop.current()
     app = make_app(make_handlers(loop, options), get_app_settings(options))
     ssl_ctx = get_ssl_context(options)

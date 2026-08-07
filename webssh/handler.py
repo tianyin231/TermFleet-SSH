@@ -26,6 +26,7 @@ from webssh.utils import (
 from webssh.worker import (
     Worker, PTYChannel, LocalProcess, register_worker, clients
 )
+from webssh.settings import save_system_settings
 
 try:
     from json.decoder import JSONDecodeError
@@ -396,6 +397,12 @@ class SystemSettingsHandler(MixinHandler, tornado.web.RequestHandler):
             raise tornado.web.HTTPError(400, 'Invalid maxupload')
         options.maxconn = maxconn
         options.maxupload = maxupload
+        try:
+            save_system_settings(maxconn, maxupload)
+        except OSError:
+            logging.error(
+                'Failed to persist system settings', exc_info=True
+            )
         self.write({
             'maxconn': options.maxconn,
             'maxupload': options.maxupload
