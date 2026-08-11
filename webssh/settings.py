@@ -50,6 +50,11 @@ define('maxconn', type=int, default=20,
        help='Maximum live connections (ssh sessions) per client')
 define('maxupload', type=int, default=100,
        help='Maximum file upload size in MiB')
+DEFAULT_CONNECT_WORKERS = 32
+MIN_CONNECT_WORKERS = 1
+MAX_CONNECT_WORKERS = 128
+define('connect_workers', type=int, default=DEFAULT_CONNECT_WORKERS,
+       help='Maximum concurrent SSH connection setup tasks')
 define('font', default='', help='custom font filename')
 define('encoding', default='',
        help='''The default character encoding of ssh servers.
@@ -66,9 +71,15 @@ max_body_size = 1 * 1024 * 1024
 system_settings_path = os.path.join(base_dir, 'system-settings.json')
 
 
-def save_system_settings(maxconn, maxupload):
+def save_system_settings(maxconn, maxupload, connect_workers=None):
+    if connect_workers is None:
+        connect_workers = options.connect_workers
     with open(system_settings_path, 'w') as fp:
-        json.dump({'maxconn': maxconn, 'maxupload': maxupload}, fp)
+        json.dump({
+            'maxconn': maxconn,
+            'maxupload': maxupload,
+            'connect_workers': connect_workers
+        }, fp)
 
 
 def load_system_settings():
@@ -86,13 +97,18 @@ def load_system_settings():
         return
     maxconn = data.get('maxconn')
     maxupload = data.get('maxupload')
+    connect_workers = data.get('connect_workers', options.connect_workers)
     if (isinstance(maxconn, int) and 1 <= maxconn <= 500 and
-            isinstance(maxupload, int) and 1 <= maxupload <= 10240):
+            isinstance(maxupload, int) and 1 <= maxupload <= 10240 and
+            isinstance(connect_workers, int) and
+            MIN_CONNECT_WORKERS <= connect_workers <= MAX_CONNECT_WORKERS):
         options.maxconn = maxconn
         options.maxupload = maxupload
+        options.connect_workers = connect_workers
         logging.info(
-            'Loaded system settings: maxconn={}, maxupload={}'.format(
-                maxconn, maxupload
+            'Loaded system settings: maxconn={}, maxupload={}, '
+            'connect_workers={}'.format(
+                maxconn, maxupload, connect_workers
             )
         )
     else:

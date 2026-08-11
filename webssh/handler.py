@@ -8,6 +8,7 @@ import socket
 import struct
 import subprocess
 import tempfile
+import threading
 import traceback
 import weakref
 import paramiko
@@ -26,7 +27,10 @@ from webssh.utils import (
 from webssh.worker import (
     Worker, PTYChannel, LocalProcess, register_worker, clients
 )
-from webssh.settings import save_system_settings
+from webssh.settings import (
+    DEFAULT_CONNECT_WORKERS, MAX_CONNECT_WORKERS, MIN_CONNECT_WORKERS,
+    save_system_settings
+)
 
 try:
     from json.decoder import JSONDecodeError
@@ -41,6 +45,7 @@ except ImportError:
 
 DEFAULT_PORT = 22
 HOST_PATTERN_CHARS = set('*?!')
+BATCH_WORKER_GRACE = 30
 
 swallow_http_errors = True
 redirecting = None
@@ -48,6 +53,32 @@ redirecting = None
 
 class InvalidValueError(Exception):
     pass
+
+
+class ConnectionLimiter(object):
+
+    def __init__(self, limit):
+        self._condition = threading.Condition()
+        self._limit = limit
+        self._active = 0
+
+    def acquire(self):
+        with self._condition:
+            while self._active >= self._limit:
+                self._condition.wait()
+            self._active += 1
+
+    def release(self):
+        with self._condition:
+            self._active -= 1
+            self._condition.notify_all()
+
+    def set_limit(self, limit):
+        if not (MIN_CONNECT_WORKERS <= limit <= MAX_CONNECT_WORKERS):
+            raise ValueError('Invalid connection concurrency limit')
+        with self._condition:
+            self._limit = limit
+            self._condition.notify_all()
 
 
 def get_ssh_config_path():
@@ -385,27 +416,38 @@ class SystemSettingsHandler(MixinHandler, tornado.web.RequestHandler):
     def get(self):
         self.write({
             'maxconn': options.maxconn,
-            'maxupload': options.maxupload
+            'maxupload': options.maxupload,
+            'connect_workers': options.connect_workers
         })
 
     def post(self):
         maxconn = to_int(self.get_argument('maxconn', ''))
         maxupload = to_int(self.get_argument('maxupload', options.maxupload))
+        connect_workers = to_int(
+            self.get_argument('connect_workers', options.connect_workers)
+        )
         if maxconn is None or maxconn < 1 or maxconn > 500:
             raise tornado.web.HTTPError(400, 'Invalid maxconn')
         if maxupload is None or maxupload < 1 or maxupload > 10240:
             raise tornado.web.HTTPError(400, 'Invalid maxupload')
+        if (connect_workers is None or
+                connect_workers < MIN_CONNECT_WORKERS or
+                connect_workers > MAX_CONNECT_WORKERS):
+            raise tornado.web.HTTPError(400, 'Invalid connect_workers')
         options.maxconn = maxconn
         options.maxupload = maxupload
+        options.connect_workers = connect_workers
+        IndexHandler.connection_limiter.set_limit(connect_workers)
         try:
-            save_system_settings(maxconn, maxupload)
+            save_system_settings(maxconn, maxupload, connect_workers)
         except OSError:
             logging.error(
                 'Failed to persist system settings', exc_info=True
             )
         self.write({
             'maxconn': options.maxconn,
-            'maxupload': options.maxupload
+            'maxupload': options.maxupload,
+            'connect_workers': options.connect_workers
         })
 
 
@@ -451,10 +493,12 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
 
 class IndexHandler(MixinHandler, tornado.web.RequestHandler):
 
-    executor = ThreadPoolExecutor(max_workers=cpu_count()*5)
+    executor = ThreadPoolExecutor(max_workers=MAX_CONNECT_WORKERS)
+    connection_limiter = ConnectionLimiter(DEFAULT_CONNECT_WORKERS)
 
     def initialize(self, loop, policy, host_keys_settings):
         super(IndexHandler, self).initialize(loop)
+        self.connection_limiter.set_limit(options.connect_workers)
         self.policy = policy
         self.host_keys_settings = host_keys_settings
         self.ssh_client = self.get_ssh_client()
@@ -483,7 +527,12 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         ssh.set_missing_host_key_policy(self.policy)
         return ssh
 
-    def get_privatekey(self):
+    def get_privatekey(self, values=None):
+        if values is not None:
+            return values.get('privatekey', u''), values.get(
+                'privatekey_filename', u''
+            )
+
         name = 'privatekey'
         lst = self.request.files.get(name)
         if lst:
@@ -541,42 +590,61 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
                     return f.read(), filename
         return '', ''
 
-    def lookup_hostname(self, hostname, port):
+    def lookup_hostname(self, hostname, port, ssh_client=None):
+        ssh_client = ssh_client or self.ssh_client
         key = hostname if port == 22 else '[{}]:{}'.format(hostname, port)
 
-        if self.ssh_client._system_host_keys.lookup(key) is None:
-            if self.ssh_client._host_keys.lookup(key) is None:
+        if ssh_client._system_host_keys.lookup(key) is None:
+            if ssh_client._host_keys.lookup(key) is None:
                 raise tornado.web.HTTPError(
                         403, 'Connection to {}:{} is not allowed.'.format(
                             hostname, port)
                     )
 
-    def get_args(self):
-        ssh_config_host = self.get_argument('ssh_config_host', u'')
+    def get_args(self, values=None):
+        def get_value(name, default=u''):
+            if values is None:
+                return self.get_argument(name, default)
+            return values.get(name, default)
+
+        ssh_client = self.ssh_client if values is None else self.get_ssh_client()
+        ssh_config_host = get_value('ssh_config_host')
         if ssh_config_host:
             config = self.get_ssh_config_data(ssh_config_host)
-            hostname = self.get_argument('hostname', u'') or \
+            hostname = get_value('hostname') or \
                 config.get('hostname') or ssh_config_host
-            username = self.get_argument('username', u'') or \
+            username = get_value('username') or \
                 config.get('user') or get_default_ssh_user()
             port = self.parse_port_value(
-                self.get_argument('port', u'') or config.get('port', u'')
+                get_value('port') or config.get('port', u'')
             )
         else:
             config = {}
-            hostname = self.get_hostname()
-            port = self.get_port()
-            username = self.get_value('username')
+            if values is None:
+                hostname = self.get_hostname()
+                port = self.get_port()
+                username = self.get_value('username')
+            else:
+                hostname = get_value('hostname')
+                port = self.parse_port_value(get_value('port'))
+                username = get_value('username')
+                if not (is_valid_hostname(hostname) or
+                        is_valid_ip_address(hostname)):
+                    raise InvalidValueError(
+                        'Invalid hostname: {}'.format(hostname)
+                    )
+                if not username:
+                    raise InvalidValueError('Missing value username')
 
         if not username:
             raise InvalidValueError('Missing value username')
         if not (is_valid_hostname(hostname) or is_valid_ip_address(hostname)):
             raise InvalidValueError('Invalid hostname: {}'.format(hostname))
 
-        password = self.get_argument('password', u'')
-        privatekey, filename = self.get_privatekey()
-        passphrase = self.get_argument('passphrase', u'')
-        totp = self.get_argument('totp', u'')
+        password = get_value('password')
+        privatekey, filename = self.get_privatekey(values)
+        passphrase = get_value('passphrase')
+        totp = get_value('totp')
 
         if not privatekey:
             privatekey, filename = self.get_identityfile_privatekey(
@@ -584,18 +652,22 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             )
 
         if isinstance(self.policy, paramiko.RejectPolicy):
-            self.lookup_hostname(hostname, port)
+            self.lookup_hostname(hostname, port, ssh_client)
 
         if privatekey:
             pkey = PrivateKey(privatekey, passphrase, filename).get_pkey_obj()
         else:
             pkey = None
 
-        self.ssh_client.totp = totp
+        ssh_client.totp = totp
         args = (hostname, port, username, password, pkey)
-        logging.debug(args)
+        logging.debug(
+            'SSH connection args prepared for %s:%s as %s',
+            hostname, port, username
+        )
 
-        return args
+        term = get_value('term') or u'xterm'
+        return args, ssh_client, term
 
     def parse_encoding(self, data):
         try:
@@ -606,12 +678,14 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         if is_valid_encoding(encoding):
             return encoding
 
-    def get_default_encoding(self, ssh):
+    def get_default_encoding(self, ssh, shell_state=None):
         commands = [
             "$SHELL -ilc 'printf \"\\036%s\\036\" \"$SHELL\"; locale charmap; printf \"\\036\"'",
             "$SHELL -ic 'printf \"\\036%s\\036\" \"$SHELL\"; locale charmap; printf \"\\036\"'"
         ]
-        self.default_shell = ''
+        if shell_state is None:
+            shell_state = {}
+        shell_state['default_shell'] = ''
 
         for command in commands:
             try:
@@ -636,17 +710,19 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
                             'ascii', 'ignore'
                         ).lower()
                         if shell in ('bash', 'zsh', 'fish'):
-                            self.default_shell = shell
+                            shell_state['default_shell'] = shell
                         data = data[second + 1:third]
                     result = self.parse_encoding(data)
                     if result:
+                        self.default_shell = shell_state['default_shell']
                         return result
 
         logging.warning('Could not detect the default encoding.')
+        self.default_shell = shell_state['default_shell']
         return 'utf-8'
 
-    def ssh_connect(self, args):
-        ssh = self.ssh_client
+    def ssh_connect(self, connection):
+        args, ssh, term = connection
         dst_addr = args[:2]
         logging.info('Connecting to {}:{}'.format(*dst_addr))
 
@@ -661,11 +737,11 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         except paramiko.BadHostKeyException:
             raise ValueError('Bad host key.')
 
-        term = self.get_argument('term', u'') or u'xterm'
         chan = ssh.invoke_shell(term=term)
         worker = Worker(self.loop, ssh, chan, dst_addr)
-        detected_encoding = self.get_default_encoding(ssh)
-        worker.enable_directory_tracking(self.default_shell)
+        shell_state = {}
+        detected_encoding = self.get_default_encoding(ssh, shell_state)
+        worker.enable_directory_tracking(shell_state['default_shell'])
         chan.setblocking(0)
         worker.encoding = options.encoding if options.encoding else detected_encoding
         return worker
@@ -703,11 +779,11 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         self.check_origin()
 
         try:
-            args = self.get_args()
+            connection = self.get_args()
         except InvalidValueError as exc:
             raise tornado.web.HTTPError(400, str(exc))
 
-        future = self.executor.submit(self.ssh_connect, args)
+        future = self.executor.submit(self.limited_ssh_connect, connection)
 
         try:
             worker = yield future
@@ -725,6 +801,82 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
             self.result.update(id=worker.id, encoding=worker.encoding)
 
         self.write(self.result)
+
+    def limited_ssh_connect(self, connection):
+        self.connection_limiter.acquire()
+        try:
+            return self.ssh_connect(connection)
+        finally:
+            self.connection_limiter.release()
+
+
+class BatchIndexHandler(IndexHandler):
+
+    @tornado.gen.coroutine
+    def post(self):
+        ip, port = self.get_client_addr()
+        if len(clients.get(ip, {})) >= options.maxconn:
+            raise tornado.web.HTTPError(403, 'Too many live connections.')
+
+        self.check_origin()
+        try:
+            payload = json.loads(to_str(self.request.body))
+        except (TypeError, ValueError):
+            raise tornado.web.HTTPError(400, 'Invalid batch request.')
+
+        connections = payload.get('connections') if isinstance(payload, dict) else None
+        if not isinstance(connections, list) or not connections:
+            raise tornado.web.HTTPError(400, 'Missing connections.')
+
+        futures = []
+        results = [dict(id=None, status=None, encoding=None)
+                   for _ in connections]
+        for index, values in enumerate(connections):
+            if not isinstance(values, dict):
+                results[index]['status'] = 'Invalid connection data.'
+                continue
+            try:
+                connection = self.get_args(values)
+            except tornado.web.HTTPError as exc:
+                results[index]['status'] = exc.log_message or str(exc)
+                continue
+            except InvalidValueError as exc:
+                results[index]['status'] = str(exc)
+                continue
+            futures.append((index, self.executor.submit(
+                self.safe_limited_ssh_connect, connection
+            )))
+
+        completed = []
+        for index, future in futures:
+            completed.append((index, (yield future)))
+
+        for index, (worker, error) in completed:
+            if error:
+                results[index]['status'] = error
+                continue
+            workers = register_worker(worker, clients, (ip, port))
+            if len(workers) > options.maxconn:
+                worker.close(reason='connection limit exceeded')
+                results[index]['status'] = 'Too many live connections.'
+                continue
+            # A large batch can take longer than the browser's queued WebSocket
+            # handshakes. Keep the worker alive while its initial socket binds.
+            worker.schedule_recycle(max(options.delay, BATCH_WORKER_GRACE))
+            results[index].update(id=worker.id, encoding=worker.encoding)
+
+        self.write({'results': results})
+
+    def safe_limited_ssh_connect(self, connection):
+        try:
+            return self.limited_ssh_connect(connection), None
+        except Exception as exc:
+            logging.error(traceback.format_exc())
+            try:
+                connection[1].close()
+            except Exception:
+                pass
+            return None, str(exc)
 
 
 @tornado.web.stream_request_body

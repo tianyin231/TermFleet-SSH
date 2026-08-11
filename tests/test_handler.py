@@ -1,6 +1,7 @@
 import io
 import os
 import tempfile
+import threading
 import unittest
 import paramiko
 
@@ -145,6 +146,67 @@ class TestMixinHandler(unittest.TestCase):
         mhandler.request.headers['X-Real-Port'] = x_real_port
         self.assertEqual(mhandler.get_real_client_addr(),
                          (x_real_ip, x_real_port))
+
+
+class TestConnectionLimiter(unittest.TestCase):
+
+    def test_limits_tasks_until_a_slot_is_released(self):
+        limiter = handler.ConnectionLimiter(1)
+        first_entered = threading.Event()
+        release_first = threading.Event()
+        second_waiting = threading.Event()
+        second_entered = threading.Event()
+
+        def first_task():
+            limiter.acquire()
+            try:
+                first_entered.set()
+                release_first.wait(1)
+            finally:
+                limiter.release()
+
+        def second_task():
+            second_waiting.set()
+            limiter.acquire()
+            try:
+                second_entered.set()
+            finally:
+                limiter.release()
+
+        first = threading.Thread(target=first_task)
+        second = threading.Thread(target=second_task)
+        first.start()
+        self.assertTrue(first_entered.wait(1))
+        second.start()
+        self.assertTrue(second_waiting.wait(1))
+        self.assertFalse(second_entered.is_set())
+        release_first.set()
+        self.assertTrue(second_entered.wait(1))
+        first.join(1)
+        second.join(1)
+
+    def test_increasing_limit_releases_waiting_task(self):
+        limiter = handler.ConnectionLimiter(1)
+        limiter.acquire()
+        waiting_started = threading.Event()
+        entered = threading.Event()
+
+        def task():
+            waiting_started.set()
+            limiter.acquire()
+            try:
+                entered.set()
+            finally:
+                limiter.release()
+
+        waiting = threading.Thread(target=task)
+        waiting.start()
+        self.assertTrue(waiting_started.wait(1))
+        self.assertFalse(entered.is_set())
+        limiter.set_limit(2)
+        self.assertTrue(entered.wait(1))
+        limiter.release()
+        waiting.join(1)
 
 
 class TestPrivateKey(unittest.TestCase):

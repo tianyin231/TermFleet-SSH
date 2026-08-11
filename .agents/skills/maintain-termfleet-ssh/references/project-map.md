@@ -1,6 +1,6 @@
 # TermFleet-SSH Project Map
 
-Verified against the repository on 2026-07-20. Re-check affected facts against source before relying on them.
+Verified against the repository on 2026-08-11. Re-check affected facts against source before relying on them.
 
 ## Product Scope
 
@@ -11,7 +11,7 @@ TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It sup
 - layered top-toolbar and connection-sidebar controls that can auto-collapse into small overlay cues or remain persistently expanded through a saved customizable cross-platform shortcut, plus a shared connection form that can move into a modal from the left cue or Ctrl/Command+Shift+C;
 - SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
 - a top-right host manager opened by button or Ctrl/Command+Shift+H, with compact group switching, creation, and quick deletion, SSH-config hosts on the left, current-group terminals plus reconnect/maximize/close controls on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
-- a top-right system-settings modal for terminal and connection preferences plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
+- a top-right system-settings modal for terminal and connection preferences, configurable SSH setup concurrency, plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
 - whole-group or browser-persisted selected-terminal command and control-key broadcast, controlled by a per-group All/Selected segmented control and customizable Ctrl/Command+Alt/Option+S shortcut, with preserved multiline input that grows from one to roughly four lines before scrolling (Enter sends, Shift+Enter inserts a newline), persisted group scope and terminal selections, empty-submit Enter without history, explicit card/count/input scope feedback, zero-selection blocking, fixed-slot scrolling history above the input, 30+ labeled read-only Linux candidates below it, Tab completion, and single-line Up/Down transitions through the original-draft gap between the two candidate regions;
 - single-terminal and per-group file upload, with group uploads following the same persisted All/Selected terminal scope as broadcasts, plus per-terminal destination review, non-persistent Bash/Zsh/Fish OSC 7 current-directory hooks, home-directory fallback, progress, cancellation, zero-selection blocking, and explicit overwrite consent;
@@ -29,6 +29,7 @@ This is a single-process application. There is no database, account system, dura
 Browser single-page workspace
   |-- HTTP GET / -----------------------> render index.html
   |-- HTTP POST / ----------------------> create Paramiko SSH Worker
+  |-- HTTP POST /batch-connect ----------> create a batch of SSH Workers
   |-- HTTP POST /local-terminal --------> create PTY-backed local Worker
   |-- HTTP GET /ssh-config -------------> discover OpenSSH aliases
   |-- HTTP GET/POST /system-settings ---> read/change process-wide runtime limits
@@ -86,9 +87,10 @@ Worker -> PTYChannel -> server-local shell process
 | --- | --- | --- |
 | `/` | GET | Render the workspace |
 | `/` | POST | Accept SSH form fields, create a Worker with supported temporary directory tracking, and return `{id, status, encoding}`; handled errors intentionally return HTTP 200 with `status` |
+| `/batch-connect` | POST | Accept a transient JSON `{connections: [...]}` payload, create each SSH Worker through the shared setup limiter, and return an aligned `{results: [{id, status, encoding}]}` list; credentials are not persisted. The browser binds returned sockets through the batch scheduler, retries failed items once through `/`, or retries a first WebSocket bind once on the same Worker after backoff |
 | `/ssh-config` | GET | Return `{path, hosts}`; hosts contain alias, hostname, username, port, and `has_identity_file` only |
-| `/system-settings` | GET | Return process-wide `{maxconn, maxupload}` |
-| `/system-settings` | POST | Validate `maxconn` in 1..500 and `maxupload` in 1..10240 MiB, then mutate both running process options and persist them to `system-settings.json` next to the package root |
+| `/system-settings` | GET | Return process-wide `{maxconn, maxupload, connect_workers}` |
+| `/system-settings` | POST | Validate `maxconn` in 1..500, `maxupload` in 1..10240 MiB, and `connect_workers` in 1..128 (default 32), then mutate running process options and persist them to `system-settings.json` next to the package root |
 | `/active-workers` | GET | Return live worker IDs for the resolved client IP as `{ids}` |
 | `/local-terminal` | POST | Create the server user's shell PTY, install supported temporary directory tracking, and return `{id, status, encoding}` |
 | `/upload?id=...` | GET | Resolve the Worker upload directory as `{path, tracked, local}`; uses OSC 7 state or the SSH home/local startup directory fallback |
@@ -110,14 +112,14 @@ Server terminal output is sent as binary frames. A newly bound socket replaces a
 
 ## Session Lifecycle
 
-1. The browser posts SSH credentials to `/` or requests `/local-terminal`.
-2. The backend creates a `Worker`, detects encoding and supported shell type through one existing exec channel, installs directory tracking in the interactive PTY when supported, registers the Worker in the canonical `clients[client_ip]` map after asynchronous setup, rechecks `maxconn`, and schedules an owned early-recycle timeout if no WebSocket binds.
+1. The browser posts SSH credentials to `/`, submits a batch to `/batch-connect`, or requests `/local-terminal`.
+2. The backend creates a `Worker`, detects encoding and supported shell type through one existing exec channel, installs directory tracking in the interactive PTY when supported, registers the Worker in the canonical `clients[client_ip]` map after asynchronous setup, rechecks `maxconn`, and schedules an owned early-recycle timeout if no WebSocket binds. Batch setup returns one aligned result per requested connection, including per-item failures, and uses `max(options.delay, 30)` seconds for this pending-bind grace.
 3. The browser opens `/ws?id=<worker_id>`. The worker cancels its pending recycle timeout, binds the handler, and registers its channel fd with Tornado's IOLoop.
 4. The browser sends JSON input/resize/ping; the worker sends binary terminal output.
 5. A manual WebSocket close reason cancels recycling and closes the worker, channel, SSH/local process, and identity-matched registry entry; transport close errors do not skip the remaining cleanup.
 6. An incidental disconnect detaches the handler and replaces any older recycle timeout with a generation-guarded timeout after `max(options.delay, 30)` seconds.
 7. On page load, the browser intersects saved `wssh-sessions` with `/active-workers`, recreates cards, and rebinds surviving workers.
-8. The browser then fills any missing cards from pinned snapshots in `wssh-groups`. Local terminals and SSH descriptors that require no stored secret create new workers automatically; other SSH cards stop in an authentication-required state.
+8. The browser then fills any missing cards from pinned snapshots in `wssh-groups`. Local terminals reconnect individually; secret-free SSH descriptors are collected into `/batch-connect`; other SSH cards stop in an authentication-required state.
 
 Each Worker tracks one recycle timeout. Cancellation advances its generation so even an already-queued stale callback cannot close a later binding or detached interval. Concurrent SSH completions always register into the current canonical per-IP map, and a post-connect `maxconn` check closes only the excess Worker without replacing existing registry entries.
 
@@ -131,7 +133,7 @@ Worker rebinding is short-lived, per process, and keyed by client IP; the worker
 | --- | --- |
 | `wssh-language` | `zh` or `en` |
 | `wssh-theme` | explicit `light` or `dark` workspace theme; terminal colors are not theme-dependent |
-| `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, persistent panel mode, and customizable toolbar shortcut bindings |
+| `wssh-settings` | disconnect confirmation, broadcast Enter, terminal font size/height, max terminals, SSH setup concurrency, persistent panel mode, and customizable toolbar shortcut bindings |
 | `wssh-operation-logs` | capped client-side operation log records |
 | `wssh-broadcast-history` | up to 100 deduplicated broadcast commands per group for local candidates and Up/Down navigation; removed with the group |
 | `wssh-groups` | group IDs, names, order, `stacked-v1` layout marker, grid spans, manual-size flag, pin state, broadcast scope, and sanitized pinned-terminal snapshots; older layout records reset to the new default spans on restore |
@@ -139,7 +141,7 @@ Worker rebinding is short-lived, per process, and keyed by client IP; the worker
 
 All browser state is JSON serialized by `localStorage`. Pinned snapshots never include passwords, TOTP values, uploaded private-key content, or passphrases. They are intentionally browser-local because the application has no accounts or authenticated ownership boundary; a server-side JSON workspace would otherwise be shared across users.
 
-The client-side maximum-terminal and upload-size settings are synchronized to process-wide backend `options.maxconn` and `options.maxupload`. They are not scoped to a user or browser. `POST /system-settings` also writes them to `system-settings.json` (git-ignored, atomic validity-checked on load at startup, ignored when corrupt), so a server restart keeps the last saved values; the saved file takes precedence over CLI defaults because it represents the last UI save, mirroring how the UI already overrides CLI values at runtime. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
+The client-side maximum-terminal, upload-size, and SSH setup concurrency settings are synchronized to process-wide backend `options.maxconn`, `options.maxupload`, and `options.connect_workers`. `connect_workers` defaults to 32 and is limited to 1..128 by a bounded setup executor; it is intentionally independent from the per-client `maxconn` limit. These settings are not scoped to a user or browser. `POST /system-settings` also writes them to `system-settings.json` (git-ignored, atomic validity-checked on load at startup, ignored when corrupt), so a server restart keeps the last saved values; older files without `connect_workers` continue using the default. The saved file takes precedence over CLI defaults because it represents the last UI save, mirroring how the UI already overrides CLI values at runtime. Startup and security parameters remain CLI-only because the web UI has no authenticated administrative boundary or restart workflow.
 
 ## Security and Ownership Invariants
 
@@ -148,6 +150,7 @@ The client-side maximum-terminal and upload-size settings are synchronized to pr
 - Host-key behavior is selected by `--policy`; reject mode requires known hosts, while auto-add writes the configured host file.
 - OpenSSH config private-key paths are read only by the backend. The discovery response exposes only a boolean.
 - Private-key upload length is capped and parsed through Paramiko.
+- `/batch-connect` accepts credentials and uploaded private-key text only for the lifetime of the request; it returns IDs/statuses and never stores the submitted values.
 - `clients` is keyed only by resolved client IP. Clients sharing an IP can list the same worker IDs through `/active-workers`; a caller that knows an ID can bind `/ws` and detach the previous handler. Treat this as an ownership/isolation limitation, not authenticated session isolation.
 - `/local-terminal` grants a shell as the web server OS user. Treat exposure and authorization changes as security-sensitive.
 - `/upload` uses the same client-IP/worker-ID ownership boundary as WebSocket attachment. It stages request bodies in temporary files, cleans them after success/failure/disconnect, rejects non-absolute target directories and unsafe filenames, and does not overwrite unless explicitly requested.
@@ -164,9 +167,10 @@ node --check webssh/static/js/main.js
 
 On 2026-07-20, JS syntax passed. The local `.venv` used Python 3.9 even though the project requires Python 3.10+, and it did not contain pytest. Its unittest baseline ran 102 tests with 1 failure and 2 errors: the wrong-port case returned Paramiko `No existing session`, and the two oversized-request tests raised client-side `ConnectionResetError` or `BrokenPipeError`. A clean Python 3.13 environment with the pinned requirements previously reproduced the same three failures. Update this note when the baseline changes; do not attribute these failures to later work without reproducing them before the change.
 
-Coverage is strongest for inherited SSH authentication, request validation, policies, origins, encoding, and basic WebSocket I/O. Coverage is weak or absent for:
+Coverage is strongest for inherited SSH authentication, request validation, policies, origins, encoding, basic WebSocket I/O, system-settings persistence, and connection-limit enforcement. Coverage is weak or absent for:
 
-- `/ssh-config`, `/system-settings`, `/active-workers`, `/local-terminal`, and `/upload` end-to-end behavior;
+- `/batch-connect` end-to-end behavior under mixed success/failure, one-item fallback retry, and large batches;
+- `/ssh-config`, `/active-workers`, `/local-terminal`, and `/upload` end-to-end behavior;
 - local-process cleanup and PTY lifecycle;
 - full refresh restoration and worker rebinding;
 - repeated real-browser detach/rebind sequences beyond the generation-guard unit coverage;

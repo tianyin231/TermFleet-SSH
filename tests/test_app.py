@@ -572,6 +572,7 @@ class OtherTestBase(TestAppBase):
         options.syshostfile = self.syshostfile
         options.tdstream = self.tdstream
         options.maxconn = self.maxconn
+        options.connect_workers = 32
         options.origin = self.origin
         app = make_app(make_handlers(loop, options), get_app_settings(options))
         return app
@@ -804,6 +805,36 @@ class TestAppWithTooManyConnections(OtherTestBase):
                 worker_.close(reason='test cleanup')
 
 
+class TestBatchConnections(OtherTestBase):
+
+    def setUp(self):
+        clients.clear()
+        super(TestBatchConnections, self).setUp()
+
+    @tornado.testing.gen_test
+    def test_batch_connect_returns_one_result_per_connection(self):
+        payload = {
+            'connections': [dict(self.body), dict(self.body)]
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Xsrftoken': 'yummy'
+        }
+        response = yield self.async_post(
+            '/batch-connect', json.dumps(payload), headers=headers
+        )
+        data = json.loads(to_str(response.body))
+        results = data['results']
+        workers = clients.get('127.0.0.1', {})
+        try:
+            self.assertEqual(len(results), 2)
+            self.assertTrue(all(item['id'] for item in results))
+            self.assertEqual(set(item['id'] for item in results), set(workers))
+        finally:
+            for worker_ in list(workers.values()):
+                worker_.close(reason='test cleanup')
+
+
 class TestSystemSettingsPersistence(OtherTestBase):
 
     def setUp(self):
@@ -821,46 +852,85 @@ class TestSystemSettingsPersistence(OtherTestBase):
 
     @tornado.testing.gen_test
     def test_save_system_settings_persists_to_file(self):
-        body = {'maxconn': '100', 'maxupload': '200', '_xsrf': 'yummy'}
+        body = {
+            'maxconn': '100',
+            'maxupload': '200',
+            'connect_workers': '48',
+            '_xsrf': 'yummy'
+        }
         response = yield self.async_post('/system-settings', body)
         self.assertEqual(response.code, 200)
         data = json.loads(to_str(response.body))
-        self.assertEqual(data, {'maxconn': 100, 'maxupload': 200})
+        self.assertEqual(data, {
+            'maxconn': 100, 'maxupload': 200, 'connect_workers': 48
+        })
         with open(ws_settings.system_settings_path) as fp:
             saved = json.load(fp)
-        self.assertEqual(saved, {'maxconn': 100, 'maxupload': 200})
+        self.assertEqual(saved, {
+            'maxconn': 100, 'maxupload': 200, 'connect_workers': 48
+        })
+
+    @tornado.testing.gen_test
+    def test_system_settings_reject_invalid_connect_workers(self):
+        response = yield self.async_post('/system-settings', {
+            'maxconn': '100',
+            'maxupload': '200',
+            'connect_workers': '129',
+            '_xsrf': 'yummy'
+        })
+        self.assertEqual(response.code, 400)
+        self.assertEqual(options.connect_workers, 32)
 
     def test_load_system_settings_applies_saved_values(self):
-        save_system_settings(100, 200)
+        save_system_settings(100, 200, 48)
         options.maxconn = 20
         options.maxupload = 100
+        options.connect_workers = 32
         load_system_settings()
         self.assertEqual(options.maxconn, 100)
         self.assertEqual(options.maxupload, 200)
+        self.assertEqual(options.connect_workers, 48)
+
+    def test_load_old_system_settings_keeps_default_connect_workers(self):
+        with open(ws_settings.system_settings_path, 'w') as fp:
+            json.dump({'maxconn': 100, 'maxupload': 200}, fp)
+        options.maxconn = 20
+        options.maxupload = 100
+        options.connect_workers = 32
+        load_system_settings()
+        self.assertEqual(options.maxconn, 100)
+        self.assertEqual(options.maxupload, 200)
+        self.assertEqual(options.connect_workers, 32)
 
     def test_load_system_settings_ignores_corrupt_file(self):
         with open(ws_settings.system_settings_path, 'w') as fp:
             fp.write('{not json')
         options.maxconn = 20
         options.maxupload = 100
+        options.connect_workers = 32
         load_system_settings()
         self.assertEqual(options.maxconn, 20)
         self.assertEqual(options.maxupload, 100)
+        self.assertEqual(options.connect_workers, 32)
 
     def test_load_system_settings_ignores_invalid_values(self):
-        save_system_settings(0, 50000)
+        save_system_settings(0, 50000, 0)
         options.maxconn = 20
         options.maxupload = 100
+        options.connect_workers = 32
         load_system_settings()
         self.assertEqual(options.maxconn, 20)
         self.assertEqual(options.maxupload, 100)
+        self.assertEqual(options.connect_workers, 32)
 
     def test_load_system_settings_without_file_keeps_defaults(self):
         options.maxconn = 20
         options.maxupload = 100
+        options.connect_workers = 32
         load_system_settings()
         self.assertEqual(options.maxconn, 20)
         self.assertEqual(options.maxupload, 100)
+        self.assertEqual(options.connect_workers, 32)
 
 
 class TestAppWithCrossOriginOperation(OtherTestBase):

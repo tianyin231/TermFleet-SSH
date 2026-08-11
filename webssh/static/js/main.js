@@ -226,6 +226,7 @@
       openingSelectedHosts: '正在打开所选 {count} 台主机到 {name}。',
       maxTerminals: '最多终端数',
       maxUploadSize: '单文件上传上限（MiB）',
+      connectionConcurrency: 'SSH 建连并发数',
       logLocalTerminal: '打开本机终端',
       logRestored: '恢复终端 {name}',
       restoringSessions: '正在恢复终端...',
@@ -427,6 +428,7 @@
       openingSelectedHosts: 'Opening {count} selected hosts in {name}.',
       maxTerminals: 'Max terminals',
       maxUploadSize: 'Maximum file size (MiB)',
+      connectionConcurrency: 'SSH connection concurrency',
       logLocalTerminal: 'Open local terminal',
       logRestored: 'Restore terminal {name}',
       restoringSessions: 'Restoring terminals...',
@@ -471,6 +473,10 @@
   ];
 
   var BROADCAST_HISTORY_LIMIT = 100;
+  var BATCH_SOCKET_WAVE_SIZE = 8;
+  var BATCH_SOCKET_WAVE_DELAY = 0;
+  var BATCH_SOCKET_RETRY_DELAY = 2000;
+  var BATCH_CONNECTION_RETRY_DELAY = 0;
   var COMMON_BROADCAST_COMMANDS = [
     'pwd',
     'ls -la',
@@ -581,6 +587,7 @@
   var terminalHeightInput = $('#setting-terminal-height');
   var maxTerminalsInput = $('#setting-max-terminals');
   var maxUploadSizeInput = $('#setting-max-upload');
+  var connectionConcurrencyInput = $('#setting-connection-concurrency');
   var clearLogButton = $('#clear-log');
   var operationLog = $('#operation-log');
   var openLogButton = $('#open-log');
@@ -674,6 +681,7 @@
       terminalHeight: 300,
       maxTerminals: 20,
       maxUploadSize: 100,
+      connectionConcurrency: 32,
       shortcuts: Object.assign({}, DEFAULT_SHORTCUTS)
     };
     try {
@@ -718,6 +726,7 @@
         if (!data) { return; }
         settings.maxTerminals = data.maxconn || settings.maxTerminals;
         settings.maxUploadSize = data.maxupload || settings.maxUploadSize;
+        settings.connectionConcurrency = data.connect_workers || settings.connectionConcurrency;
         saveSettings();
         applySettingsToControls();
       });
@@ -727,6 +736,7 @@
     var body = new window.URLSearchParams();
     body.set('maxconn', settings.maxTerminals);
     body.set('maxupload', settings.maxUploadSize);
+    body.set('connect_workers', settings.connectionConcurrency);
     body.set('_xsrf', xsrfToken());
     window.fetch('system-settings', {
       method: 'POST',
@@ -745,6 +755,7 @@
     terminalHeightInput.value = settings.terminalHeight;
     maxTerminalsInput.value = settings.maxTerminals;
     maxUploadSizeInput.value = settings.maxUploadSize;
+    connectionConcurrencyInput.value = settings.connectionConcurrency;
     applyPersistentPanelMode();
     renderShortcutSettings();
     applyShortcutBindings();
@@ -901,6 +912,7 @@
     settings.terminalHeight = Math.max(180, Math.min(720, Number(terminalHeightInput.value) || 300));
     settings.maxTerminals = Math.max(1, Math.min(500, Number(maxTerminalsInput.value) || 20));
     settings.maxUploadSize = Math.max(1, Math.min(10240, Number(maxUploadSizeInput.value) || 100));
+    settings.connectionConcurrency = Math.max(1, Math.min(128, Number(connectionConcurrencyInput.value) || 32));
     saveSettings();
     saveSystemSettings();
     logAction('logSettings');
@@ -1428,6 +1440,7 @@
 
   function restorePinnedSessions() {
     var existing = Object.create(null);
+    var sshBatch = [];
     Object.keys(terminals).forEach(function (id) {
       existing[terminals[id].persistentId] = true;
     });
@@ -1451,13 +1464,18 @@
         if (session.isLocal) {
           reconnectLocalTerminal(record);
         } else if (session.autoReconnect) {
-          reconnectSshTerminal(record, session.reconnectInfo, true);
+          sshBatch.push({
+            record: record,
+            info: session.reconnectInfo,
+            data: reconnectSshFormData(record, session.reconnectInfo, true)
+          });
         } else {
           setCardState(record, 'error', null, 'authenticationRequired');
           renderAuthenticationRequired(record);
         }
       });
     });
+    if (sshBatch.length) { reconnectSshTerminalBatch(sshBatch); }
   }
 
   function hostAuthLabel(host) {
@@ -1572,9 +1590,9 @@
     }
     var group = groupById(hostManagerGroupId) || groupById(groupSelect.value) || groups[0];
     if (!group) { group = addGroup(null); }
-    selectedHosts.forEach(function (host) {
-      connectTerminal(sshConfigHostFormData(host, group.id));
-    });
+    connectTerminalBatch(selectedHosts.map(function (host) {
+      return sshConfigHostFormData(host, group.id);
+    }));
     selectedSshConfigHosts = Object.create(null);
     sshConfigSelectionAnchor = null;
     refreshSshConfigSelectionState();
@@ -2209,7 +2227,11 @@
       toast(t('noRetryableGroupTerminals', { name: group.name }));
       return;
     }
-    failed.forEach(function (record) { reconnectTerminal(record, false, true); });
+    var sshBatch = [];
+    failed.forEach(function (record) {
+      reconnectTerminal(record, false, true, sshBatch);
+    });
+    if (sshBatch.length) { reconnectSshTerminalBatch(sshBatch); }
     var count = terminalCountText(failed.length);
     var message = t('reconnectingFailedGroup', { name: group.name, count: count });
     setStatus(message);
@@ -2747,7 +2769,8 @@
       currentDirectory: opts.currentDirectory || '', osc7Buffer: '',
       persistentId: opts.persistentId || newPersistentSessionId(),
       autoReconnect: !!opts.autoReconnect || !!opts.isLocal,
-      broadcastSelected: !!opts.broadcastSelected
+      broadcastSelected: !!opts.broadcastSelected,
+      retryConnection: null, socketRetrying: false, socketTimer: null
     };
     terminals[id] = record;
     refreshTerminalBroadcastSelection(record);
@@ -2887,6 +2910,12 @@
   function closeTerminal(id, reason) {
     var record = terminals[id];
     if (!record) { return; }
+    record.retryConnection = null;
+    record.socketRetrying = false;
+    if (record.socketTimer) {
+      window.clearTimeout(record.socketTimer);
+      record.socketTimer = null;
+    }
     if (record.card.classList.contains('maximized')) { unmaximize(record); }
     stopLatencyProbe(record);
     if (record.observer) { record.observer.disconnect(); }
@@ -2960,7 +2989,7 @@
     reauthPreviousFocus = null;
   }
 
-  function reconnectTerminal(record, credentialsReady, quiet) {
+  function reconnectTerminal(record, credentialsReady, quiet, batchEntries) {
     if (!record || record.state === 'connecting') { return; }
     if (!credentialsReady && (record.stateKey === 'authenticationRequired' || pendingAuthenticationRecord === record)) {
       beginReauthentication(record);
@@ -2988,6 +3017,13 @@
     if (!quiet) { toast(t('reconnectingTerminal', { name: record.displayName || record.hostname })); }
     if (info.type === 'local') {
       reconnectLocalTerminal(record);
+    } else if (batchEntries) {
+      var automatic = record.autoReconnect && !record.reconnectData;
+      batchEntries.push({
+        record: record,
+        info: info,
+        data: reconnectSshFormData(record, info, automatic)
+      });
     } else {
       reconnectSshTerminal(record, info, record.autoReconnect && !record.reconnectData);
     }
@@ -3017,8 +3053,7 @@
     });
   }
 
-  function reconnectSshTerminal(record, info, automatic) {
-    var reauthenticating = !automatic && pendingAuthenticationRecord === record;
+  function reconnectSshFormData(record, info, automatic) {
     var data;
     if (automatic) {
       data = new window.FormData();
@@ -3033,6 +3068,12 @@
     data.set('target_group', record.group);
     data.set('ssh_config_host', info.sshConfigHost || '');
     cleanData(data);
+    return data;
+  }
+
+  function reconnectSshTerminal(record, info, automatic) {
+    var reauthenticating = !automatic && pendingAuthenticationRecord === record;
+    var data = reconnectSshFormData(record, info, automatic);
     if (reauthenticating) { submitReauthButton.disabled = true; }
     var xhr = new window.XMLHttpRequest();
     xhr.open('POST', '', true);
@@ -3072,6 +3113,181 @@
       saveSessions();
     };
     xhr.send(data);
+  }
+
+  function readBatchFile(value) {
+    if (!value || typeof value === 'string' || !value.name) {
+      return Promise.resolve(value || '');
+    }
+    return new Promise(function (resolve, reject) {
+      var reader = new window.FileReader();
+      reader.onload = function () { resolve(reader.result || ''); };
+      reader.onerror = reject;
+      reader.readAsText(value);
+    });
+  }
+
+  function serializeBatchFormData(data) {
+    var values = {};
+    var pending = [];
+    data.forEach(function (value, key) {
+      if (typeof value === 'string') {
+        values[key] = value;
+        return;
+      }
+      pending.push(readBatchFile(value).then(function (content) {
+        values[key] = content;
+        values[key + '_filename'] = value.name || '';
+      }));
+    });
+    return Promise.all(pending).then(function () { return values; });
+  }
+
+  function requestBatchConnections(entries) {
+    return Promise.all(entries.map(function (entry) {
+      return serializeBatchFormData(entry.data);
+    })).then(function (connections) {
+      return window.fetch('batch-connect', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Xsrftoken': xsrfToken()
+        },
+        body: JSON.stringify({ connections: connections })
+      });
+    }).then(function (response) {
+      if (!response.ok) { throw new Error(response.status + ': ' + response.statusText); }
+      return response.json();
+    });
+  }
+
+  function requestSingleConnection(data) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new window.XMLHttpRequest();
+      xhr.open('POST', '', true);
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState !== 4) { return; }
+        if (xhr.status !== 200) {
+          reject(new Error(xhr.status + ': ' + xhr.statusText));
+          return;
+        }
+        var msg;
+        try { msg = JSON.parse(xhr.responseText); } catch (e) { msg = null; }
+        if (!msg || !msg.id) {
+          reject(new Error((msg && msg.status) || t('connectionFailed')));
+          return;
+        }
+        resolve(msg);
+      };
+      xhr.send(data);
+    });
+  }
+
+  function retryBatchEntry(entry, reconnect) {
+    var record = entry.record;
+    record.retryConnection = null;
+    record.socketRetrying = true;
+    requestSingleConnection(entry.data).then(function (msg) {
+      record.socketRetrying = false;
+      if (!terminals[record.id]) { return; }
+      record.workerId = msg.id;
+      if (reconnect) {
+        record.reconnectInfo = safeReconnectInfo(entry.info);
+        record.reconnectData = cloneFormData(entry.data);
+        record.autoReconnect = canReconnectWithoutStoredSecrets(entry.data);
+      }
+      openSocket(record, msg.id, msg.encoding || 'utf-8');
+      if (!reconnect) {
+        logAction('logConnect', { name: record.displayName || record.hostname });
+      }
+      saveSessions();
+    }).catch(function (error) {
+      record.socketRetrying = false;
+      if (!terminals[record.id]) { return; }
+      var message = error.message || t('connectionFailed');
+      if (entry.batchStatus && entry.batchStatus !== message) {
+        message = entry.batchStatus + ' → ' + message;
+      }
+      setCardState(entry.record, 'error', message);
+    });
+  }
+
+  function retryBatchEntries(entries, reconnect) {
+    entries.forEach(function (entry, index) {
+      var delay = BATCH_CONNECTION_RETRY_DELAY +
+        Math.floor(index / BATCH_SOCKET_WAVE_SIZE) * BATCH_SOCKET_WAVE_DELAY;
+      entry.record.socketTimer = window.setTimeout(function () {
+        entry.record.socketTimer = null;
+        if (terminals[entry.record.id]) {
+          retryBatchEntry(entry, reconnect);
+        }
+      }, delay);
+    });
+  }
+
+  function bindBatchSocket(entry, reconnect) {
+    var record = entry.record;
+    var msg = entry.msg;
+    if (!terminals[record.id]) { return; }
+    record.workerId = msg.id;
+    if (reconnect) {
+      record.reconnectInfo = safeReconnectInfo(entry.info);
+      record.reconnectData = cloneFormData(entry.data);
+      record.autoReconnect = canReconnectWithoutStoredSecrets(entry.data);
+    }
+    record.socketRetrying = false;
+    record.retryConnection = function () {
+      record.retryConnection = null;
+      record.socketRetrying = true;
+      record.socketTimer = window.setTimeout(function () {
+        record.socketTimer = null;
+        if (!terminals[record.id]) {
+          record.socketRetrying = false;
+          return;
+        }
+        record.socketRetrying = false;
+        openSocket(record, msg.id, msg.encoding || 'utf-8');
+      }, BATCH_SOCKET_RETRY_DELAY);
+    };
+    openSocket(record, msg.id, msg.encoding || 'utf-8');
+    if (!reconnect) {
+      logAction('logConnect', { name: record.displayName || record.hostname });
+    }
+    saveSessions();
+  }
+
+  function scheduleBatchSockets(entries, reconnect) {
+    entries.forEach(function (entry, index) {
+      var delay = Math.floor(index / BATCH_SOCKET_WAVE_SIZE) *
+        BATCH_SOCKET_WAVE_DELAY;
+      entry.record.socketTimer = window.setTimeout(function () {
+        entry.record.socketTimer = null;
+        bindBatchSocket(entry, reconnect);
+      }, delay);
+    });
+  }
+
+  function reconnectSshTerminalBatch(entries) {
+    requestBatchConnections(entries).then(function (payload) {
+      var results = payload && payload.results || [];
+      var retryEntries = [];
+      var socketEntries = [];
+      entries.forEach(function (entry, index) {
+        var msg = results[index] || {};
+        if (!msg.id) {
+          entry.batchStatus = msg.status || t('connectionFailed');
+          retryEntries.push(entry);
+          return;
+        }
+        entry.msg = msg;
+        socketEntries.push(entry);
+      });
+      scheduleBatchSockets(socketEntries, true);
+      retryBatchEntries(retryEntries, true);
+    }).catch(function () {
+      retryBatchEntries(entries, true);
+    });
   }
 
   function toggleMaximize(record, button) {
@@ -3190,6 +3406,9 @@
     });
 
     sock.onopen = function () {
+      if (record.sock !== sock) { return; }
+      record.retryConnection = null;
+      record.socketRetrying = false;
       record.body.innerHTML = '';
       term.open(record.body);
       setCardState(record, 'connected', null, 'connected');
@@ -3203,6 +3422,7 @@
     };
 
     sock.onmessage = function (message) {
+      if (record.sock !== sock) { return; }
       if (typeof message.data === 'string') {
         try {
           var event = JSON.parse(message.data);
@@ -3223,12 +3443,28 @@
 
     sock.onerror = function () {
       if (record.sock !== sock) { return; }
+      if (record.retryConnection && !record.socketRetrying) {
+        var retry = record.retryConnection;
+        record.retryConnection = null;
+        record.socketRetrying = true;
+        retry();
+        return;
+      }
+      if (record.socketRetrying) { return; }
       stopLatencyProbe(record);
       setCardState(record, 'error', null, 'socketError');
     };
 
     sock.onclose = function (event) {
       if (record.sock !== sock) { return; }
+      if (record.retryConnection && !record.socketRetrying) {
+        var retry = record.retryConnection;
+        record.retryConnection = null;
+        record.socketRetrying = true;
+        retry();
+        return;
+      }
+      if (record.socketRetrying) { return; }
       stopLatencyProbe(record);
       if (terminals[record.id]) {
         setCardState(record, 'error', event.reason || t('disconnected'));
@@ -3246,7 +3482,7 @@
     record.observer.observe(record.body);
   }
 
-  function connectTerminal(data) {
+  function createSshTerminalRecord(data) {
     var groupId = data.get('target_group') || groupSelect.value || (groups[0] && groups[0].id);
     if (!groupId) { addGroup(null); groupId = groups[0].id; }
 
@@ -3267,6 +3503,11 @@
       reconnectInfo: safeReconnectInfo(reconnectInfo)
     });
     record.reconnectData = cloneFormData(data);
+    return record;
+  }
+
+  function connectTerminal(data) {
+    var record = createSshTerminalRecord(data);
 
     connectButton.disabled = true;
     var xhr = new window.XMLHttpRequest();
@@ -3295,6 +3536,40 @@
       saveSessions();
     };
     xhr.send(data);
+  }
+
+  function connectTerminalBatch(datas) {
+    var entries = datas.map(function (data) {
+      return { record: createSshTerminalRecord(data), data: data };
+    });
+    connectButton.disabled = true;
+    requestBatchConnections(entries).then(function (payload) {
+      var results = payload && payload.results || [];
+      var connected = 0;
+      var retryEntries = [];
+      var socketEntries = [];
+      entries.forEach(function (entry, index) {
+        var msg = results[index] || {};
+        if (!msg.id) {
+          entry.batchStatus = msg.status || t('connectionFailed');
+          retryEntries.push(entry);
+          return;
+        }
+        connected += 1;
+        entry.msg = msg;
+        socketEntries.push(entry);
+      });
+      setStatus(connected ? t('sessionOpened', {
+        name: terminalCountText(connected)
+      }) : t('connectionFailed'));
+      scheduleBatchSockets(socketEntries, false);
+      retryBatchEntries(retryEntries, false);
+    }).catch(function () {
+      retryBatchEntries(entries, false);
+      setStatus(t('connectionFailed'));
+    }).then(function () {
+      connectButton.disabled = false;
+    });
   }
 
   function openLocalTerminal() {
@@ -4089,7 +4364,7 @@
     toast(t('allDisconnected'));
   });
 
-  [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput].forEach(function (input) {
+  [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput, connectionConcurrencyInput].forEach(function (input) {
     input.addEventListener('change', updateSettingsFromControls);
   });
   resetShortcutsButton.addEventListener('click', function () {

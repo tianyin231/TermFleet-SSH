@@ -5,7 +5,7 @@ import tornado.ioloop
 from tornado.options import options
 from webssh import handler
 from webssh.handler import (
-    IndexHandler, SSHConfigHandler, SystemSettingsHandler,
+    IndexHandler, BatchIndexHandler, SSHConfigHandler, SystemSettingsHandler,
     ActiveWorkersHandler, LocalTerminalHandler, UploadHandler, WsockHandler,
     NotFoundHandler
 )
@@ -23,6 +23,9 @@ def make_handlers(loop, options):
     handlers = [
         (r'/', IndexHandler, dict(loop=loop, policy=policy,
                                   host_keys_settings=host_keys_settings)),
+        (r'/batch-connect', BatchIndexHandler, dict(
+            loop=loop, policy=policy, host_keys_settings=host_keys_settings
+        )),
         (r'/ssh-config', SSHConfigHandler),
         (r'/system-settings', SystemSettingsHandler),
         (r'/active-workers', ActiveWorkersHandler),
