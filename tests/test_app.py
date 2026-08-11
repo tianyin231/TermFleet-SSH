@@ -65,7 +65,8 @@ class TestAppBase(AsyncHTTPTestCase):
         self.assertIsNotNone(data['id'])
         self.assertIsNone(data['status'])
 
-    def fetch_request(self, url, method='GET', body='', headers={}, sync=True):
+    def fetch_request(self, url, method='GET', body='', headers={}, sync=True,
+                      raise_error=True):
         if not sync and url.startswith('/'):
             url = self.get_url(url)
 
@@ -78,13 +79,19 @@ class TestAppBase(AsyncHTTPTestCase):
             headers.update(self.headers)
 
         client = self if sync else self.get_http_client()
-        return client.fetch(url, method=method, body=body, headers=headers)
+        return client.fetch(
+            url, method=method, body=body, headers=headers,
+            raise_error=raise_error
+        )
 
     def sync_post(self, url, body, headers={}):
         return self.fetch_request(url, 'POST', body, headers)
 
-    def async_post(self, url, body, headers={}):
-        return self.fetch_request(url, 'POST', body, headers, sync=False)
+    def async_post(self, url, body, headers={}, raise_error=True):
+        return self.fetch_request(
+            url, 'POST', body, headers, sync=False,
+            raise_error=raise_error
+        )
 
 
 class TestAppBasic(TestAppBase):
@@ -872,12 +879,14 @@ class TestSystemSettingsPersistence(OtherTestBase):
 
     @tornado.testing.gen_test
     def test_system_settings_reject_invalid_connect_workers(self):
-        response = yield self.async_post('/system-settings', {
-            'maxconn': '100',
-            'maxupload': '200',
-            'connect_workers': '129',
-            '_xsrf': 'yummy'
-        })
+        response = yield self.async_post(
+            '/system-settings', {
+                'maxconn': '100',
+                'maxupload': '200',
+                'connect_workers': '129',
+                '_xsrf': 'yummy'
+            }, raise_error=False
+        )
         self.assertEqual(response.code, 400)
         self.assertEqual(options.connect_workers, 32)
 
