@@ -66,7 +66,7 @@ class TestAppBase(AsyncHTTPTestCase):
         self.assertIsNone(data['status'])
 
     def fetch_request(self, url, method='GET', body='', headers={}, sync=True,
-                      raise_error=True):
+                      raise_error=None):
         if not sync and url.startswith('/'):
             url = self.get_url(url)
 
@@ -79,15 +79,15 @@ class TestAppBase(AsyncHTTPTestCase):
             headers.update(self.headers)
 
         client = self if sync else self.get_http_client()
-        return client.fetch(
-            url, method=method, body=body, headers=headers,
-            raise_error=raise_error
-        )
+        kwargs = dict(method=method, body=body, headers=headers)
+        if raise_error is not None:
+            kwargs['raise_error'] = raise_error
+        return client.fetch(url, **kwargs)
 
     def sync_post(self, url, body, headers={}):
         return self.fetch_request(url, 'POST', body, headers)
 
-    def async_post(self, url, body, headers={}, raise_error=True):
+    def async_post(self, url, body, headers={}, raise_error=None):
         return self.fetch_request(
             url, 'POST', body, headers, sync=False,
             raise_error=raise_error
