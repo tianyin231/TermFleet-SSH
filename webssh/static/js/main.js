@@ -119,6 +119,19 @@
       uploadSummary: '{file} 已上传到 {count} 个终端。',
       uploadPartial: '{file}：成功 {success} 个，失败 {failed} 个。',
       uploadCancelled: '上传已取消。',
+      downloadLogs: '保存日志',
+      logSaved: '已保存 {count} 份日志。',
+      logSavedPartial: '已保存 {success} 份，失败 {failed} 份。',
+      noLogsToSave: '没有可保存的终端日志。',
+      noSelectedLogTargets: '{name} 当前使用已选范围，请先选择终端再保存日志。',
+      logDownload: '保存日志：{name} {count} 份',
+      logTargets: '保存目标',
+      logFileName: '文件名',
+      saveLocation: '保存位置',
+      saveLocationDefault: '浏览器默认下载目录',
+      chooseLocation: '选择位置',
+      locationUnsupported: '当前浏览器不支持选择保存位置，将保存到浏览器默认下载目录。',
+      saveLogs: '保存',
       noUploadTargets: '没有可上传文件的已连接终端。',
       noSelectedUploadTargets: '{name} 当前使用已选范围，请先选择终端再上传。',
       invalidUploadDirectory: '目标目录必须是绝对路径。',
@@ -207,6 +220,22 @@
       enterKey: 'Enter',
       escKey: 'Esc',
       broadcastShortcut: '广播控制键',
+      lineSendMode: '发送方式：一次性或逐行',
+      lineSendOnce: '一次性',
+      lineSendLines: '逐行',
+      lineSendPlaceholder: '逐行模式：一行一条命令，^c 等控制键可单独成行...',
+      lineSendModeInterval: '间隔',
+      lineSendModePrompt: '提示符',
+      lineSendInterval: '发送间隔（毫秒）',
+      lineSendBusy: '{name} 的逐行发送仍在进行中，请先停止。',
+      lineSendWaiting: '等待 {count} 个终端返回提示符…',
+      lineSendTimedOutAdvancing: '等待提示符超时，{count} 个终端已跳过并继续发送。',
+      lineSendTargetsLost: '逐行发送中止：{name} 的终端已全部断开。',
+      lineSendDone: '逐行发送完成：{name} 共 {total} 行。',
+      lineSendStopped: '已停止逐行发送（编辑器内容保留）。',
+      lineSendStopProgress: '停止 {index}/{total}',
+      logLineSendDone: '逐行发送：{name} {total} 行',
+      logLineSendStopped: '停止逐行发送：{name} 剩余 {remaining} 行',
       reconnectTerminal: '重新连接',
       networkConnecting: '网络：连接中',
       networkOnline: '延迟：{latency} ms',
@@ -321,6 +350,19 @@
       uploadSummary: 'Uploaded {file} to {count} terminals.',
       uploadPartial: '{file}: {success} succeeded, {failed} failed.',
       uploadCancelled: 'Upload cancelled.',
+      downloadLogs: 'Save logs',
+      logSaved: 'Saved {count} log file(s).',
+      logSavedPartial: 'Saved {success}, failed {failed}.',
+      noLogsToSave: 'No terminal logs to save.',
+      noSelectedLogTargets: '{name} is using selected scope. Select at least one terminal before saving logs.',
+      logDownload: 'Saved logs: {count} file(s) from {name}',
+      logTargets: 'Log targets',
+      logFileName: 'File name',
+      saveLocation: 'Save location',
+      saveLocationDefault: 'Browser default downloads',
+      chooseLocation: 'Choose location',
+      locationUnsupported: 'This browser cannot pick a save location; logs go to the default downloads folder.',
+      saveLogs: 'Save',
       noUploadTargets: 'No connected terminals are available for upload.',
       noSelectedUploadTargets: '{name} is using selected scope. Select at least one terminal before uploading.',
       invalidUploadDirectory: 'Target directories must be absolute paths.',
@@ -409,6 +451,22 @@
       enterKey: 'Enter',
       escKey: 'Esc',
       broadcastShortcut: 'Broadcast key combo',
+      lineSendMode: 'Send mode: once or line by line',
+      lineSendOnce: 'Once',
+      lineSendLines: 'Lines',
+      lineSendPlaceholder: 'Line-by-line: one command per line, ^c etc. may stand alone...',
+      lineSendModeInterval: 'Interval',
+      lineSendModePrompt: 'Prompt',
+      lineSendInterval: 'Send interval (ms)',
+      lineSendBusy: 'Line-by-line send for {name} is still running. Stop it first.',
+      lineSendWaiting: 'Waiting for {count} terminal(s) to show a prompt…',
+      lineSendTimedOutAdvancing: 'Prompt wait timed out; {count} terminal(s) skipped and sending continues.',
+      lineSendTargetsLost: 'Line-by-line aborted: all terminals in {name} disconnected.',
+      lineSendDone: 'Line-by-line complete: {total} lines to {name}.',
+      lineSendStopped: 'Line-by-line stopped (editor content kept).',
+      lineSendStopProgress: 'Stop {index}/{total}',
+      logLineSendDone: 'Line-by-line: {total} lines to {name}',
+      logLineSendStopped: 'Stopped line-by-line: {remaining} lines left for {name}',
       reconnectTerminal: 'Reconnect',
       networkConnecting: 'Network: connecting',
       networkOnline: 'Latency: {latency} ms',
@@ -464,7 +522,7 @@
   var SHORTCUT_ACTIONS = [
     { id: 'connectServer', labelKey: 'connectServer', buttonSelector: '.sidebar-rail' },
     { id: 'togglePersistentPanels', labelKey: 'togglePersistentPanels', buttonSelector: '.topbar-rail' },
-    { id: 'toggleBroadcastScope', labelKey: 'toggleBroadcastScope', buttonSelector: '.broadcast-scope-toggle' },
+    { id: 'toggleBroadcastScope', labelKey: 'toggleBroadcastScope', buttonSelector: '.broadcast-scope-widget' },
     { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
     { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
     { id: 'operationLog', labelKey: 'operationLog', buttonSelector: '#open-log' },
@@ -529,6 +587,7 @@
   var focusedGroupId = null;
   var operationLogs = loadLogs();
   var broadcastHistory = loadBroadcastHistory();
+  var broadcastEditors = {};  // {groupId: input/sendBtn/sendLabel/uploadBtn/shortcutSelect/line controls}
   var settings = loadSettings();
   var selectedSshConfigHosts = Object.create(null);
   var sshConfigSelectionAnchor = null;
@@ -542,6 +601,8 @@
   var uploadSelection = null;
   var uploadPickerRecords = [];
   var uploadPreviousFocus = null;
+  var logSaveState = null;
+  var logSavePreviousFocus = null;
   var boardWheelLocked = false;
 
   // ---- DOM ---------------------------------------------------------------
@@ -613,6 +674,14 @@
   var closeFileUploadButton = $('#close-file-upload');
   var cancelFileUploadButton = $('#cancel-file-upload');
   var startFileUploadButton = $('#start-file-upload');
+  var logSaveOverlay = $('#log-save-overlay');
+  var closeLogSaveButton = $('#close-log-save');
+  var cancelLogSaveButton = $('#cancel-log-save');
+  var confirmLogSaveButton = $('#confirm-log-save');
+  var chooseLogLocationButton = $('#choose-log-location');
+  var logSaveTargets = $('#log-save-targets');
+  var logSaveLocationText = $('#log-save-location');
+  var logSaveCountText = $('#log-save-count');
   var fileUploadName = $('#file-upload-name');
   var fileUploadSize = $('#file-upload-size');
   var fileUploadTargets = $('#file-upload-targets');
@@ -646,6 +715,7 @@
     send: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-6 14-2-5-6-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
     plus: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     upload: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 14v5h14v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    download: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v13m0 0 5-5m-5 5-5-5M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     trash: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     reconnect: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.1 7.1L4 9M5.5 14a7 7 0 0 0 12.4 2.9L20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     pin: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4h6v5l3 7H6l3-7V4ZM12 16v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -1089,8 +1159,8 @@
       var fullscreenBtn = column.querySelector('.group-fullscreen-btn');
       var deleteBtn = column.querySelector('.danger-hover');
       var historyList = column.querySelector('.broadcast-history');
-      var shortcut = column.querySelector('.broadcast select');
       var upload = column.querySelector('.broadcast-upload');
+      var download = column.querySelector('.broadcast-download');
       var sendText = column.querySelector('.broadcast button span');
       if (nameEl) { nameEl.setAttribute('title', t('renameGroup')); }
       if (grip) {
@@ -1111,23 +1181,22 @@
         fullscreenBtn.setAttribute('aria-label', focusedGroupId === group.id ? t('exitGroupFullscreen') : t('groupFullscreen'));
       }
       if (historyList) { historyList.setAttribute('aria-label', t('broadcastHistory')); }
-      if (shortcut) {
-        shortcut.setAttribute('title', t('broadcastShortcut'));
-        shortcut.setAttribute('aria-label', t('broadcastShortcut'));
-        shortcut.options[0].textContent = t('shortcutPlaceholder');
-        shortcut.options[1].textContent = t('ctrlC');
-        shortcut.options[2].textContent = t('ctrlD');
-        shortcut.options[3].textContent = t('ctrlZ');
-        shortcut.options[4].textContent = t('ctrlL');
-        shortcut.options[5].textContent = t('tabKey');
-        shortcut.options[6].textContent = t('enterKey');
-        shortcut.options[7].textContent = t('escKey');
+      if (broadcastEditors[group.id]) {
+        // Rebuild shared control-key/mode dropdown and refresh line-send widgets.
+        refreshLineSendControls(group);
       }
       if (upload) {
         upload.setAttribute('title', t('uploadToGroup'));
         upload.setAttribute('aria-label', t('uploadToGroup'));
       }
-      if (sendText) { sendText.textContent = t('send'); }
+      if (download) {
+        download.setAttribute('title', t('downloadLogs'));
+        download.setAttribute('aria-label', t('downloadLogs'));
+      }
+      if (sendText) {
+        if (lineRun && lineRun.groupId === group.id) { updateLineRunButton(); }
+        else { sendText.textContent = t('send'); }
+      }
       refreshBroadcastSelection(group.id);
       updateEmptyState(group.id);
     });
@@ -1332,6 +1401,9 @@
         manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize,
         pinned: !!group.pinned,
         broadcastSelectedOnly: !!group.broadcastSelectedOnly,
+        lineSend: !!group.lineSend,
+        lineSendMode: group.lineSendMode === 'prompt' ? 'prompt' : 'interval',
+        lineSendInterval: Math.min(10000, Math.max(0, Number(group.lineSendInterval) || 500)),
         pinnedSessions: group.pinned ? (group.pinnedSessions || []).map(safePinnedSession).filter(Boolean) : []
       };
     });
@@ -1352,6 +1424,9 @@
         manualSize: stackedLayout && item.manualSize,
         pinned: !!item.pinned,
         broadcastSelectedOnly: !!item.broadcastSelectedOnly,
+        lineSend: !!item.lineSend,
+        lineSendMode: item.lineSendMode === 'prompt' ? 'prompt' : 'interval',
+        lineSendInterval: Math.min(10000, Math.max(0, Number(item.lineSendInterval) || 500)),
         pinnedSessions: (item.pinnedSessions || []).map(safePinnedSession).filter(Boolean),
         skipSave: true
       });
@@ -1922,7 +1997,7 @@
     var group = groupById(groupId);
     var column = board.querySelector('.group[data-group="' + groupId + '"]');
     if (!group || !column) { return; }
-    var control = column.querySelector('.broadcast-scope-toggle');
+    var control = column.querySelector('.broadcast-scope-widget');
     if (!control) { return; }
     var selectedOnly = !!group.broadcastSelectedOnly;
     var label = t(selectedOnly ? 'broadcastScopeSelectedLabel' : 'broadcastScopeAllLabel');
@@ -1970,9 +2045,9 @@
       }) : terminalCountText(total);
     }
     if (input) {
-      input.setAttribute('placeholder', selectedOnly ? (selected ?
+      input.setAttribute('placeholder', group.lineSend ? t('lineSendPlaceholder') : (selectedOnly ? (selected ?
         t('broadcastSelectedPlaceholder', { count: terminalCountText(selected) }) :
-        t('broadcastSelectedEmptyPlaceholder')) : t('broadcastPlaceholder'));
+        t('broadcastSelectedEmptyPlaceholder')) : t('broadcastPlaceholder')));
       input.setAttribute('aria-label', selectedOnly ? t('broadcastSelectedLabel', {
         name: group.name, count: terminalCountText(selected)
       }) : t('broadcastLabel', { name: group.name }));
@@ -2282,10 +2357,24 @@
       text: t('broadcastScopeSelected')
     });
     var broadcastScopeControl = el('div', {
-      class: 'broadcast-scope-toggle', role: 'group',
+      class: 'broadcast-scope-toggle broadcast-scope-widget', role: 'group',
       title: t(group.broadcastSelectedOnly ? 'broadcastScopeSelectedLabel' : 'broadcastScopeAllLabel'),
       'aria-label': t('toggleBroadcastScope')
     }, [broadcastScopeAllBtn, broadcastScopeSelectedBtn]);
+    var lineOnceBtn = el('button', {
+      class: 'broadcast-scope-option line-send-once' + (group.lineSend ? '' : ' is-active'),
+      type: 'button', 'aria-pressed': group.lineSend ? 'false' : 'true',
+      text: t('lineSendOnce')
+    });
+    var lineLinesBtn = el('button', {
+      class: 'broadcast-scope-option line-send-lines' + (group.lineSend ? ' is-active' : ''),
+      type: 'button', 'aria-pressed': group.lineSend ? 'true' : 'false',
+      text: t('lineSendLines')
+    });
+    var lineSendModeToggle = el('div', {
+      class: 'broadcast-scope-toggle line-send-toggle', role: 'group',
+      title: t('lineSendMode'), 'aria-label': t('lineSendMode')
+    }, [lineOnceBtn, lineLinesBtn]);
     var reconnectFailedBtn = el('button', {
       class: 'group-reconnect-failed', type: 'button',
       title: t('reconnectFailedGroup'), 'aria-label': t('reconnectFailedGroup'), html: ICONS.reconnect
@@ -2304,7 +2393,7 @@
 
     var head = el('div', { class: 'group-head' }, [
       grip, title,
-      el('div', { class: 'group-tools' }, [broadcastScopeControl, pinBtn, reconnectFailedBtn, fullscreenBtn, deleteBtn])
+      el('div', { class: 'group-tools' }, [broadcastScopeControl, lineSendModeToggle, pinBtn, reconnectFailedBtn, fullscreenBtn, deleteBtn])
     ]);
 
     // Broadcast bar.
@@ -2533,28 +2622,51 @@
       } else if (event.key === 'Escape' && !historyList.hidden) {
         event.preventDefault();
         closeCandidates(true);
+      } else if (event.key === 'Escape' && lineRun && lineRun.groupId === group.id) {
+        event.preventDefault();
+        lineRunStop(group.id);
       }
     });
     input.addEventListener('blur', function () { closeCandidates(false); });
-    var shortcutSelect = el('select', { 'aria-label': t('broadcastShortcut'), title: t('broadcastShortcut') }, [
-      el('option', { value: '', text: t('shortcutPlaceholder') }),
-      el('option', { value: 'ctrl+c', text: t('ctrlC') }),
-      el('option', { value: 'ctrl+d', text: t('ctrlD') }),
-      el('option', { value: 'ctrl+z', text: t('ctrlZ') }),
-      el('option', { value: 'ctrl+l', text: t('ctrlL') }),
-      el('option', { value: 'tab', text: t('tabKey') }),
-      el('option', { value: 'enter', text: t('enterKey') }),
-      el('option', { value: 'esc', text: t('escKey') })
+    var shortcutSelect = el('select', { class: 'broadcast-shortcut', 'aria-label': t('broadcastShortcut'), title: t('broadcastShortcut') });
+    var intervalInput = el('input', {
+      class: 'line-send-interval', type: 'number', min: '0', max: '10000', step: '100',
+      value: String(group.lineSendInterval || 500),
+      'aria-label': t('lineSendInterval'), title: t('lineSendInterval')
+    });
+    var intervalWrap = el('label', { class: 'line-send-interval-wrap' }, [
+      intervalInput, el('span', { class: 'line-send-unit', text: 'ms' })
     ]);
     var uploadBtn = el('button', {
       class: 'btn btn-icon broadcast-upload', type: 'button',
       title: t('uploadToGroup'), 'aria-label': t('uploadToGroup'), html: ICONS.upload
     });
-    var sendBtn = el('button', { class: 'btn btn-accent btn-sm', type: 'submit', html: ICONS.send + '<span>' + t('send') + '</span>' });
-    var broadcastForm = el('form', { class: 'broadcast' }, [inputWrap, shortcutSelect, uploadBtn, sendBtn]);
+    var downloadBtn = el('button', {
+      class: 'btn btn-icon broadcast-download', type: 'button',
+      title: t('downloadLogs'), 'aria-label': t('downloadLogs'), html: ICONS.download
+    });
+    var sendLabel = el('span', { text: t('send') });
+    var sendBtn = el('button', {
+      class: 'btn btn-accent btn-sm broadcast-send', type: 'submit', html: ICONS.send
+    }, [sendLabel]);
+    var broadcastForm = el('form', { class: 'broadcast' }, [
+      inputWrap, shortcutSelect, intervalWrap, downloadBtn, uploadBtn, sendBtn
+    ]);
     broadcastForm.addEventListener('submit', function (event) {
       event.preventDefault();
+      if (lineRun) {
+        if (lineRun.groupId === group.id) { lineRunStop(group.id); }
+        else { toast(t('lineSendBusy', { name: lineRun.name }), 'error'); }
+        return;
+      }
       var value = input.value;
+      if (group.lineSend) {
+        closeCandidates(false);
+        if (lineRunStart(group.id, value)) {
+          if (value.trim()) { rememberBroadcastCommand(group.id, value); }
+        }
+        return;
+      }
       var hasCommand = !!value.trim();
       if (broadcastToGroup(group.id, hasCommand ? value : 'enter', broadcastRecipients(group.id)) === null) { return; }
       if (hasCommand) { rememberBroadcastCommand(group.id, value); }
@@ -2566,8 +2678,22 @@
     });
     shortcutSelect.addEventListener('change', function () {
       if (!shortcutSelect.value) { return; }
-      broadcastToGroup(group.id, shortcutSelect.value, broadcastRecipients(group.id));
-      shortcutSelect.value = '';
+      if (group.lineSend) {
+        group.lineSendMode = shortcutSelect.value === 'prompt' ? 'prompt' : 'interval';
+        saveGroups();
+        refreshLineSendControls(group);
+      } else {
+        broadcastToGroup(group.id, shortcutSelect.value, broadcastRecipients(group.id));
+        shortcutSelect.value = '';
+      }
+    });
+    lineOnceBtn.addEventListener('click', function () { setGroupLineSend(group, false); });
+    lineLinesBtn.addEventListener('click', function () { setGroupLineSend(group, true); });
+    intervalInput.addEventListener('change', function () {
+      var ms = Math.min(10000, Math.max(0, Number(intervalInput.value) || 0));
+      group.lineSendInterval = ms;
+      intervalInput.value = String(ms);
+      saveGroups();
     });
     uploadBtn.addEventListener('click', function () {
       var records = broadcastRecipients(group.id);
@@ -2577,6 +2703,7 @@
       }
       chooseUploadFile(records, uploadBtn);
     });
+    downloadBtn.addEventListener('click', function () { downloadTerminalLogs(group.id); });
 
     var list = el('div', { class: 'terminal-list', dataset: { list: group.id } });
 
@@ -2585,6 +2712,23 @@
       title: t('resize'),
       'aria-hidden': 'true'
     });
+
+    broadcastEditors[group.id] = {
+      input: input,
+      sendBtn: sendBtn,
+      sendLabel: sendLabel,
+      uploadBtn: uploadBtn,
+      downloadBtn: downloadBtn,
+      shortcutSelect: shortcutSelect,
+      lineSendModeToggle: lineSendModeToggle,
+      lineOnceBtn: lineOnceBtn,
+      lineLinesBtn: lineLinesBtn,
+      intervalInput: intervalInput,
+      form: broadcastForm,
+      resize: resizeBroadcastInput,
+      clearDraft: function () { historyDraft = ''; }
+    };
+    refreshLineSendControls(group);
 
     var column = el('section', { class: 'group', dataset: { group: group.id }, 'aria-label': group.name }, [
       head, broadcastForm, list, groupResizeHandle
@@ -2643,6 +2787,9 @@
       manualSize: !!opts.manualSize,
       pinned: !!opts.pinned,
       broadcastSelectedOnly: !!opts.broadcastSelectedOnly,
+      lineSend: !!opts.lineSend,
+      lineSendMode: opts.lineSendMode === 'prompt' ? 'prompt' : 'interval',
+      lineSendInterval: Math.min(10000, Math.max(0, Number(opts.lineSendInterval) || 500)),
       pinnedSessions: (opts.pinnedSessions || []).map(safePinnedSession).filter(Boolean)
     };
     groups.push(group);
@@ -2667,6 +2814,7 @@
       toast(t('keepGroup'), 'error');
       return;
     }
+    if (lineRun && lineRun.groupId === groupId) { lineRunStop(groupId); }
     if (focusedGroupId === groupId) { exitGroupFullscreen(); }
     var members = terminalsInGroup(groupId);
     if (members.length) {
@@ -2766,7 +2914,7 @@
       stateText: stateText, networkText: networkText, reconnectInfo: opts.reconnectInfo || null,
       term: null, sock: null, decoder: 'utf-8', state: 'connecting', stateKey: 'connecting', observer: null,
       workerId: opts.workerId || null, isLocal: !!opts.isLocal,
-      currentDirectory: opts.currentDirectory || '', osc7Buffer: '',
+      currentDirectory: opts.currentDirectory || '', osc7Buffer: '', logBuffer: '',
       persistentId: opts.persistentId || newPersistentSessionId(),
       autoReconnect: !!opts.autoReconnect || !!opts.isLocal,
       broadcastSelected: !!opts.broadcastSelected,
@@ -3328,6 +3476,34 @@
   }
 
   // ---- SSH transport (unchanged contract) --------------------------------
+  var LOG_BUFFER_LIMIT = 1024 * 1024;
+
+  function appendTerminalLog(record, text) {
+    if (!record || !text) { return; }
+    record.logBuffer += text;
+    if (record.logBuffer.length > LOG_BUFFER_LIMIT) {
+      // Keep the newest half when the buffer overflows; an implicit cap on memory.
+      record.logBuffer = record.logBuffer.slice(-Math.floor(LOG_BUFFER_LIMIT / 2));
+    }
+  }
+
+  function stripAnsiEscapes(text) {
+    return text
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g, '')
+      .replace(/\x1b\[[0-9;:?]*[ -\/]*[@-~]/g, '')
+      .replace(/\x1b[PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?/g, '')
+      .replace(/\x1b[@-Z\\-_]/g, '')
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]/g, '')
+      .replace(/\r\n/g, '\n');
+  }
+
+  function logTimestamp() {
+    var d = new Date();
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' +
+      pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+  }
+
   function readMessage(blob, callback, decoder) {
     var reader = new window.FileReader();
     reader.onload = function () {
@@ -3361,6 +3537,8 @@
       var path;
       try { path = decodeURIComponent(encodedPath); } catch (e) { path = encodedPath; }
       if (!path || path[0] !== '/' || path.length > 4096 || path.indexOf('\x00') !== -1) { continue; }
+      record.osc7Seen = true;
+      if (record.onPrompt) { record.onPrompt(); }
       if (record.currentDirectory !== path) {
         record.currentDirectory = path;
         saveSessions();
@@ -3437,6 +3615,7 @@
       setNetworkState(record, 'online');
       readMessage(message.data, function (text) {
         trackTerminalDirectory(record, text);
+        appendTerminalLog(record, text);
         if (record.term) { record.term.write(text); }
       }, record.decoder);
     };
@@ -3453,6 +3632,7 @@
       if (record.socketRetrying) { return; }
       stopLatencyProbe(record);
       setCardState(record, 'error', null, 'socketError');
+      lineRunDropRecord(record);
     };
 
     sock.onclose = function (event) {
@@ -3469,6 +3649,7 @@
       if (terminals[record.id]) {
         setCardState(record, 'error', event.reason || t('disconnected'));
       }
+      lineRunDropRecord(record);
     };
   }
 
@@ -3636,6 +3817,362 @@
     return sent > 0;
   }
 
+  function cleanLogFileName(value) {
+    return (value || '').replace(/[\\/:*?"<>|\s]+/g, '-').replace(/^-+|-+$/g, '') || 'terminal';
+  }
+
+  function downloadTerminalLogs(groupId) {
+    var group = groupById(groupId);
+    var name = group ? group.name : groupId;
+    if (group && group.broadcastSelectedOnly && !selectedBroadcastTerminals(groupId).length) {
+      var noTargets = t('noSelectedLogTargets', { name: name });
+      setStatus(noTargets);
+      toast(noTargets, 'error');
+      return;
+    }
+    var targets = (group ? broadcastRecipients(groupId) : []).filter(function (record) {
+      return !!(record && record.logBuffer);
+    });
+    if (!targets.length) {
+      var noLogs = t('noLogsToSave');
+      setStatus(noLogs);
+      toast(noLogs, 'error');
+      return;
+    }
+    openLogSaveDialog(groupId, targets);
+  }
+
+  function openLogSaveDialog(groupId, records) {
+    closeConnectionDialog(false);
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    var stamp = logTimestamp();
+    logSaveState = {
+      groupId: groupId, dir: null, saving: false, targets: []
+    };
+    logSavePreviousFocus = document.activeElement;
+    logSaveTargets.innerHTML = '';
+    records.forEach(function (record) {
+      var inputId = 'log-save-name-' + record.id;
+      var defaultValue = cleanLogFileName(record.displayName || record.hostname || record.id || 'terminal') +
+        '_' + stamp + '.txt';
+      var input = el('input', { id: inputId, type: 'text', value: defaultValue, spellcheck: 'false' });
+      var text = stripAnsiEscapes(record.logBuffer);
+      var size = formatFileSize(text.length);
+      logSaveState.targets.push({ record: record, input: input, text: text, size: size });
+      logSaveTargets.appendChild(el('div', { class: 'upload-target-row' }, [
+        el('div', { class: 'upload-target-copy' }, [
+          el('strong', { text: record.displayName || record.hostname }),
+          el('span', { text: size })
+        ]),
+        el('label', { class: 'upload-path-field', for: inputId }, [
+          el('span', { text: t('logFileName') }), input
+        ])
+      ]));
+    });
+    logSaveLocationText.textContent = t('saveLocationDefault');
+    logSaveCountText.textContent = terminalCountText(records.length);
+    logSaveOverlay.classList.add('is-open');
+    logSaveOverlay.setAttribute('aria-hidden', 'false');
+    confirmLogSaveButton.disabled = false;
+    cancelLogSaveButton.disabled = false;
+    chooseLogLocationButton.disabled = false;
+    var firstInput = logSaveTargets.querySelector('input');
+    if (firstInput) { firstInput.focus(); } else { closeLogSaveButton.focus(); }
+  }
+
+  function closeLogSaveDialog(restoreFocus) {
+    if (!logSaveOverlay.classList.contains('is-open')) { return true; }
+    if (logSaveState && logSaveState.saving) { return false; }
+    logSaveOverlay.classList.remove('is-open');
+    logSaveOverlay.setAttribute('aria-hidden', 'true');
+    logSaveState = null;
+    if (restoreFocus !== false && logSavePreviousFocus && document.contains(logSavePreviousFocus)) {
+      logSavePreviousFocus.focus();
+    }
+    logSavePreviousFocus = null;
+    return true;
+  }
+
+  function saveLogFile(text, name, dir) {
+    if (dir) {
+      return dir.getFileHandle(name, { create: true }).then(function (handle) {
+        return handle.createWritable().then(function (writer) {
+          return writer.write(text).then(function () { return writer.close(); });
+        });
+      });
+    }
+    var blob = new window.Blob([text], { type: 'text/plain;charset=utf-8' });
+    var url = window.URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () { window.URL.revokeObjectURL(url); }, 5000);
+    return Promise.resolve();
+  }
+
+  // ---- Line-by-line send -------------------------------------------------
+  var lineRun = null;
+  var LINE_WAIT_TIMEOUT = 30000;
+
+  function lineScriptEntries(text) {
+    return (text || '').split(/\r?\n/).map(function (line) {
+      var trimmed = line.replace(/\s+$/, '');
+      var seq = controlSequence(trimmed);
+      if (trimmed === '' || seq !== undefined) {
+        // Blank line = one Enter; a control-key line sends its sequence only.
+        return { payload: seq !== undefined ? seq : '\r', control: true };
+      }
+      return { payload: trimmed + (settings.broadcastEnter ? '\r' : ''), control: false };
+    });
+  }
+
+  function setGroupLineSend(group, enabled) {
+    if (!!group.lineSend === !!enabled) { return; }
+    group.lineSend = !!enabled;
+    saveGroups();
+    refreshLineSendControls(group);
+    refreshBroadcastSelection(group.id);
+  }
+
+  function refreshBroadcastSelect(group, editor) {
+    var sel = editor.shortcutSelect;
+    sel.options.length = 0;
+    var items;
+    if (group.lineSend) {
+      items = [
+        { value: 'interval', text: t('lineSendModeInterval') },
+        { value: 'prompt', text: t('lineSendModePrompt') }
+      ];
+      sel.setAttribute('aria-label', t('lineSendMode'));
+      sel.title = t('lineSendMode');
+    } else {
+      items = [
+        { value: '', text: t('shortcutPlaceholder') },
+        { value: 'ctrl+c', text: t('ctrlC') },
+        { value: 'ctrl+d', text: t('ctrlD') },
+        { value: 'ctrl+z', text: t('ctrlZ') },
+        { value: 'ctrl+l', text: t('ctrlL') },
+        { value: 'tab', text: t('tabKey') },
+        { value: 'enter', text: t('enterKey') },
+        { value: 'esc', text: t('escKey') }
+      ];
+      sel.setAttribute('aria-label', t('broadcastShortcut'));
+      sel.title = t('broadcastShortcut');
+    }
+    items.forEach(function (item) {
+      sel.appendChild(el('option', { value: item.value, text: item.text }));
+    });
+    sel.value = group.lineSend ? (group.lineSendMode === 'prompt' ? 'prompt' : 'interval') : '';
+  }
+
+  function refreshLineSendControls(group) {
+    var editor = broadcastEditors[group.id];
+    if (!editor) { return; }
+    var on = !!group.lineSend;
+    editor.lineSendModeToggle.title = t('lineSendMode');
+    editor.lineSendModeToggle.setAttribute('aria-label', t('lineSendMode'));
+    editor.lineOnceBtn.textContent = t('lineSendOnce');
+    editor.lineLinesBtn.textContent = t('lineSendLines');
+    editor.intervalInput.title = t('lineSendInterval');
+    editor.intervalInput.setAttribute('aria-label', t('lineSendInterval'));
+    editor.lineOnceBtn.classList.toggle('is-active', !on);
+    editor.lineLinesBtn.classList.toggle('is-active', on);
+    editor.lineOnceBtn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    editor.lineLinesBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    editor.form.classList.toggle('is-line-send', on);
+    editor.form.classList.toggle('is-line-prompt', on && group.lineSendMode === 'prompt');
+    refreshBroadcastSelect(group, editor);
+    editor.intervalInput.parentNode.classList.toggle('is-hidden', !on || group.lineSendMode !== 'interval');
+  }
+
+  function updateLineRunButton() {
+    var run = lineRun;
+    if (!run) { return; }
+    var editor = broadcastEditors[run.groupId];
+    if (!editor) { return; }
+    editor.sendLabel.textContent = t('lineSendStopProgress', {
+      index: run.index, total: run.entries.length
+    });
+  }
+
+  function setLineRunUI(groupId, running) {
+    var editor = broadcastEditors[groupId];
+    if (!editor) { return; }
+    editor.sendBtn.classList.toggle('is-running', running);
+    editor.uploadBtn.disabled = !!running;
+    editor.downloadBtn.disabled = !!running;
+    editor.shortcutSelect.disabled = !!running;
+    editor.intervalInput.disabled = !!running;
+    editor.lineOnceBtn.disabled = !!running;
+    editor.lineLinesBtn.disabled = !!running;
+    if (running) {
+      editor.sendBtn.setAttribute('aria-label', t('lineSendStopped'));
+      updateLineRunButton();
+    } else {
+      editor.sendLabel.textContent = t('send');
+      editor.sendBtn.removeAttribute('aria-label');
+    }
+  }
+
+  function lineRunStart(groupId, text) {
+    if (lineRun) { return false; }
+    var group = groupById(groupId);
+    if (!group) { return false; }
+    if (group.broadcastSelectedOnly && !selectedBroadcastTerminals(groupId).length) {
+      var noTargets = t('noSelectedBroadcastTargets', { name: group.name });
+      setStatus(noTargets);
+      toast(noTargets, 'error');
+      return false;
+    }
+    var targets = broadcastRecipients(groupId).filter(function (record) {
+      return record.state === 'connected' && record.sock &&
+        record.sock.readyState === window.WebSocket.OPEN;
+    });
+    if (!targets.length) {
+      var offline = t('noConnected', { name: group.name });
+      setStatus(offline);
+      toast(offline, 'error');
+      return false;
+    }
+    var entries = lineScriptEntries(text);
+    if (!entries.length) { return false; }
+    lineRun = {
+      groupId: groupId,
+      name: group.name,
+      targets: targets,
+      entries: entries,
+      index: 0,
+      mode: group.lineSendMode === 'prompt' ? 'prompt' : 'interval',
+      interval: Math.min(10000, Math.max(0, Number(group.lineSendInterval) || 500)),
+      pending: [],
+      timer: null,
+      stopped: false
+    };
+    targets.forEach(function (record) {
+      record.onPrompt = function () { lineRunPrompt(record); };
+    });
+    setLineRunUI(groupId, true);
+    lineRunSendNext(groupId);
+    return true;
+  }
+
+  function lineRunSendNext(groupId) {
+    var run = lineRun;
+    if (!run || run.stopped || run.groupId !== groupId) { return; }
+    if (run.index >= run.entries.length) {
+      lineRunFinish(groupId);
+      return;
+    }
+    var entry = run.entries[run.index];
+    var sent = 0;
+    run.targets.forEach(function (record) {
+      if (sendToRecord(record, entry.payload)) { sent += 1; }
+    });
+    run.index += 1;
+    run.pending = [];
+    if (!sent) {
+      lineRunFinish(groupId);
+      return;
+    }
+    updateLineRunButton();
+    if (run.mode === 'interval') {
+      run.timer = window.setTimeout(function () { lineRunSendNext(groupId); }, run.interval);
+    } else {
+      run.pending = run.targets.slice();
+      setStatus(t('lineSendWaiting', { count: run.pending.length }));
+      run.timer = window.setTimeout(function () { lineRunWaitTimeout(groupId); }, LINE_WAIT_TIMEOUT);
+    }
+  }
+
+  function lineRunPrompt(record) {
+    var run = lineRun;
+    if (!run || run.stopped || run.mode !== 'prompt' || !run.pending.length) { return; }
+    var i = run.pending.indexOf(record);
+    if (i === -1) { return; }
+    run.pending.splice(i, 1);
+    if (!run.pending.length) {
+      if (run.timer) { window.clearTimeout(run.timer); run.timer = null; }
+      lineRunSendNext(run.groupId);
+    }
+  }
+
+  function lineRunWaitTimeout(groupId) {
+    var run = lineRun;
+    if (!run || run.stopped || run.groupId !== groupId || run.mode !== 'prompt') { return; }
+    run.timer = null;
+    var missed = run.pending.length;
+    run.pending = [];
+    if (missed) {
+      setStatus(t('lineSendTimedOutAdvancing', { count: missed }));
+    }
+    lineRunSendNext(groupId);
+  }
+
+  function lineRunDropRecord(record) {
+    var run = lineRun;
+    if (!run || run.stopped) { return; }
+    var pi = run.pending.indexOf(record);
+    if (pi !== -1) { run.pending.splice(pi, 1); }
+    var ti = run.targets.indexOf(record);
+    if (ti !== -1) { run.targets.splice(ti, 1); }
+    if (!run.targets.length) {
+      lineRunFinish(run.groupId);
+      return;
+    }
+    if (run.mode === 'prompt' && !run.pending.length && run.timer) {
+      window.clearTimeout(run.timer);
+      run.timer = null;
+      lineRunSendNext(run.groupId);
+    }
+  }
+
+  function lineRunStop(groupId) {
+    var run = lineRun;
+    if (!run || (groupId && run.groupId !== groupId)) { return; }
+    run.stopped = true;
+    if (run.timer) { window.clearTimeout(run.timer); run.timer = null; }
+    var remaining = Math.max(0, run.entries.length - run.index);
+    run.targets.forEach(function (record) { record.onPrompt = null; });
+    lineRun = null;
+    setLineRunUI(groupId, false);
+    var message = t('lineSendStopped');
+    setStatus(message);
+    toast(message);
+    logAction('logLineSendStopped', { name: run.name, remaining: remaining });
+  }
+
+  function lineRunFinish(groupId) {
+    var run = lineRun;
+    if (!run || run.groupId !== groupId) { return; }
+    if (run.timer) { window.clearTimeout(run.timer); run.timer = null; }
+    var allSent = run.index >= run.entries.length && !run.stopped;
+    run.targets.forEach(function (record) { record.onPrompt = null; });
+    lineRun = null;
+    setLineRunUI(groupId, false);
+    var editor = broadcastEditors[groupId];
+    if (allSent && editor) {
+      editor.input.value = '';
+      editor.resize();
+      editor.clearDraft();
+      editor.input.focus();
+    }
+    if (allSent) {
+      var done = t('lineSendDone', { name: run.name, total: run.entries.length });
+      setStatus(done);
+      toast(done, 'success');
+      logAction('logLineSendDone', { name: run.name, total: run.entries.length });
+    } else {
+      var loss = t('lineSendTargetsLost', { name: run.name });
+      setStatus(loss);
+      toast(loss, 'error');
+    }
+  }
+
   function formatFileSize(size) {
     if (size < 1024) { return size + ' B'; }
     if (size < 1024 * 1024) { return (size / 1024).toFixed(1) + ' KB'; }
@@ -3729,6 +4266,7 @@
     closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
+    closeLogSaveDialog(false);
     logOverlay.classList.remove('is-open');
     uploadSelection = {
       file: file, targets: [], uploading: false, finished: false,
@@ -4343,6 +4881,57 @@
   fileUploadOverlay.addEventListener('click', function (event) {
     if (event.target === fileUploadOverlay) { closeUploadDialog(); }
   });
+  closeLogSaveButton.addEventListener('click', function () { closeLogSaveDialog(); });
+  cancelLogSaveButton.addEventListener('click', function () { closeLogSaveDialog(); });
+  logSaveOverlay.addEventListener('click', function (event) {
+    if (event.target === logSaveOverlay) { closeLogSaveDialog(); }
+  });
+  chooseLogLocationButton.addEventListener('click', function () {
+    if (!logSaveState || logSaveState.saving) { return; }
+    if (window.showDirectoryPicker) {
+      window.showDirectoryPicker().then(function (handle) {
+        if (!logSaveState) { return; }
+        logSaveState.dir = handle;
+        logSaveLocationText.textContent = handle.name;
+      }).catch(function (error) {
+        if (error && error.name === 'AbortError') { return; }
+        if (logSaveState) { toast(t('locationUnsupported'), 'error'); }
+      });
+    } else {
+      toast(t('locationUnsupported'), 'error');
+    }
+  });
+  confirmLogSaveButton.addEventListener('click', function () {
+    if (!logSaveState || logSaveState.saving) { return; }
+    logSaveState.saving = true;
+    confirmLogSaveButton.disabled = true;
+    cancelLogSaveButton.disabled = true;
+    chooseLogLocationButton.disabled = true;
+    var stamp = logTimestamp();
+    var group = groupById(logSaveState.groupId);
+    var groupName = group ? group.name : logSaveState.groupId;
+    var tasks = logSaveState.targets.map(function (target) {
+      var name = cleanLogFileName(target.input.value) ||
+        cleanLogFileName(target.record.displayName || target.record.hostname) + '_' + stamp;
+      if (!/\.txt$/i.test(name)) { name += '.txt'; }
+      return saveLogFile(target.text, name, logSaveState.dir).then(function () {
+        return { ok: true };
+      }).catch(function () {
+        return { ok: false };
+      });
+    });
+    Promise.all(tasks).then(function (results) {
+      var success = results.filter(function (item) { return item.ok; }).length;
+      var failed = results.length - success;
+      var message = failed ? t('logSavedPartial', { success: success, failed: failed })
+        : t('logSaved', { count: success });
+      setStatus(message);
+      toast(message, failed ? 'error' : 'success');
+      logAction('logDownload', { name: groupName, count: success });
+      if (logSaveState) { logSaveState.saving = false; }
+      closeLogSaveDialog();
+    });
+  });
   privateKeyInput.addEventListener('change', function () {
     privateKeyName.textContent = privateKeyInput.files.length ? privateKeyInput.files[0].name : t('noFileChosen');
   });
@@ -4456,6 +5045,10 @@
       }
       if (fileUploadOverlay.classList.contains('is-open')) {
         closeUploadDialog();
+        return;
+      }
+      if (logSaveOverlay.classList.contains('is-open')) {
+        closeLogSaveDialog();
         return;
       }
       if (hostManagerOverlay.classList.contains('is-open')) {
