@@ -37,6 +37,9 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: '跳到终端列表',
       toggleLanguage: '切换语言',
+      installApp: '安装应用',
+      appInstalled: 'TermFleet-SSH 已安装。',
+      titlebarOverlayUnavailable: '浏览器未开放系统标题栏，已固定应用内工具栏。请确认使用 HTTPS、localhost 或 127.0.0.1 安装。',
       switchToDarkTheme: '切换到夜间主题',
       switchToLightTheme: '切换到日间主题',
       openToolbar: '展开工具栏',
@@ -80,6 +83,7 @@
       reauthenticate: '重新认证',
       reauthenticateSession: '重新认证终端',
       reauthenticationReady: '请为 {name} 重新输入认证信息。',
+      authenticationFailed: '验证失败：{reason}',
       broadcastHistory: '广播命令候选',
       historyCandidate: '历史',
       commonCandidate: '常用',
@@ -268,6 +272,9 @@
       appTitle: 'TermFleet-SSH',
       skipTerminals: 'Skip to terminals',
       toggleLanguage: 'Switch language',
+      installApp: 'Install app',
+      appInstalled: 'TermFleet-SSH was installed.',
+      titlebarOverlayUnavailable: 'The browser did not expose the system title bar. The in-app toolbar is pinned instead. Install over HTTPS, localhost, or 127.0.0.1.',
       switchToDarkTheme: 'Switch to dark theme',
       switchToLightTheme: 'Switch to light theme',
       openToolbar: 'Expand toolbar',
@@ -311,6 +318,7 @@
       reauthenticate: 'Re-authenticate',
       reauthenticateSession: 'Re-authenticate terminal',
       reauthenticationReady: 'Enter authentication details again for {name}.',
+      authenticationFailed: 'Authentication failed: {reason}',
       broadcastHistory: 'Broadcast command candidates',
       historyCandidate: 'History',
       commonCandidate: 'Common',
@@ -604,6 +612,7 @@
   var logSaveState = null;
   var logSavePreviousFocus = null;
   var boardWheelLocked = false;
+  var deferredInstallPrompt = null;
 
   // ---- DOM ---------------------------------------------------------------
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -618,7 +627,9 @@
   var connectButton = $('#connect-button');
   var toastStack = $('#toast-stack');
   var themeToggle = $('#theme-toggle');
+  var themeColorMeta = $('#theme-color');
   var languageToggle = $('#language-toggle');
+  var installAppButton = $('#install-app');
   var sshConfigHostInput = $('#ssh-config-host');
   var sshConfigList = $('#ssh-config-list');
   var refreshSshConfig = $('#refresh-ssh-config');
@@ -1103,10 +1114,41 @@
     var isDark = currentTheme === 'dark';
     var label = t(isDark ? 'switchToLightTheme' : 'switchToDarkTheme');
     document.documentElement.setAttribute('data-theme', currentTheme);
+    themeColorMeta.setAttribute('content', isDark ? '#0b1220' : '#ffffff');
     themeToggle.innerHTML = isDark ? ICONS.sun : ICONS.moon;
     themeToggle.setAttribute('title', label);
     themeToggle.setAttribute('aria-label', label);
     themeToggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+  }
+
+  function isInstalledApp() {
+    return window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function applyInstalledAppMode() {
+    var overlay = window.navigator.windowControlsOverlay;
+    var overlayActive = !!(overlay && overlay.visible);
+    var installed = isInstalledApp();
+    document.documentElement.classList.toggle('installed-app-mode', installed);
+    document.documentElement.classList.toggle('window-controls-overlay-active', overlayActive);
+    document.documentElement.dataset.appDisplayMode = overlayActive ?
+      'window-controls-overlay' : (installed ? 'installed-fallback' : 'browser');
+    return overlayActive;
+  }
+
+  function registerServiceWorker() {
+    if (!window.isSecureContext || !('serviceWorker' in window.navigator)) { return; }
+    window.navigator.serviceWorker.register('/service-worker.js').catch(function () {
+      // Installation remains optional when service-worker registration is unavailable.
+    });
+  }
+
+  function updateInstallAppButton() {
+    installAppButton.classList.toggle(
+      'hide', !deferredInstallPrompt || isInstalledApp()
+    );
   }
 
   function applyLanguage() {
@@ -3143,6 +3185,7 @@
       beginReauthentication(record);
       return;
     }
+    var reauthenticating = !!(credentialsReady && pendingAuthenticationRecord === record);
     var info = record.reconnectInfo || safeReconnectInfo({
       type: record.isLocal ? 'local' : 'ssh',
       hostname: record.hostname,
@@ -3173,7 +3216,7 @@
         data: reconnectSshFormData(record, info, automatic)
       });
     } else {
-      reconnectSshTerminal(record, info, record.autoReconnect && !record.reconnectData);
+      reconnectSshTerminal(record, info, record.autoReconnect && !record.reconnectData, reauthenticating);
     }
   }
 
@@ -3219,8 +3262,7 @@
     return data;
   }
 
-  function reconnectSshTerminal(record, info, automatic) {
-    var reauthenticating = !automatic && pendingAuthenticationRecord === record;
+  function reconnectSshTerminal(record, info, automatic, reauthenticating) {
     var data = reconnectSshFormData(record, info, automatic);
     if (reauthenticating) { submitReauthButton.disabled = true; }
     var xhr = new window.XMLHttpRequest();
@@ -3233,7 +3275,8 @@
         if (reauthenticating) {
           setCardState(record, 'error', null, 'authenticationRequired');
           renderAuthenticationRequired(record);
-          toast(requestError, 'error');
+          setStatus(t('authenticationFailed', { reason: requestError }));
+          toast(t('authenticationFailed', { reason: requestError }), 'error');
         } else {
           setCardState(record, 'error', requestError);
         }
@@ -3246,7 +3289,8 @@
         if (reauthenticating) {
           setCardState(record, 'error', null, 'authenticationRequired');
           renderAuthenticationRequired(record);
-          toast(connectionError, 'error');
+          setStatus(t('authenticationFailed', { reason: connectionError }));
+          toast(t('authenticationFailed', { reason: connectionError }), 'error');
         } else {
           setCardState(record, 'error', connectionError);
         }
@@ -3257,7 +3301,10 @@
       record.reconnectData = cloneFormData(data);
       record.autoReconnect = canReconnectWithoutStoredSecrets(data);
       openSocket(record, msg.id, msg.encoding || 'utf-8');
-      if (pendingAuthenticationRecord === record) { closeReauthentication(false); }
+      if (reauthenticating) {
+        setStatus(t('sessionOpened', { name: record.displayName || record.hostname }));
+        closeReauthentication(false);
+      }
       saveSessions();
     };
     xhr.send(data);
@@ -3688,8 +3735,6 @@
   }
 
   function connectTerminal(data) {
-    var record = createSshTerminalRecord(data);
-
     connectButton.disabled = true;
     var xhr = new window.XMLHttpRequest();
     xhr.open('POST', '', true);
@@ -3697,24 +3742,26 @@
       if (xhr.readyState !== 4) { return; }
       connectButton.disabled = false;
       if (xhr.status !== 200) {
-        setCardState(record, 'error', xhr.status + ': ' + xhr.statusText);
-        setStatus(xhr.status + ': ' + (xhr.statusText || t('requestFailed')));
+        var requestError = xhr.status + ': ' + (xhr.statusText || t('requestFailed'));
+        setStatus(t('authenticationFailed', { reason: requestError }));
+        toast(t('authenticationFailed', { reason: requestError }), 'error');
         return;
       }
       var msg;
       try { msg = JSON.parse(xhr.responseText); } catch (e) { msg = null; }
       if (!msg || !msg.id) {
         var reason = (msg && msg.status) || t('connectionFailed');
-        setCardState(record, 'error', reason);
-        setStatus(reason);
-        toast(reason, 'error');
+        setStatus(t('authenticationFailed', { reason: reason }));
+        toast(t('authenticationFailed', { reason: reason }), 'error');
         return;
       }
+      var record = createSshTerminalRecord(data);
       record.workerId = msg.id;
       openSocket(record, msg.id, msg.encoding || 'utf-8');
       setStatus(t('sessionOpened', { name: record.hostname }));
       logAction('logConnect', { name: record.displayName || record.hostname });
       saveSessions();
+      closeConnectionDialog(false);
     };
     xhr.send(data);
   }
@@ -4737,7 +4784,6 @@
       toast(errors[0], 'error');
       return;
     }
-    closeConnectionDialog(false);
     connectTerminal(data);
   });
 
@@ -4978,6 +5024,36 @@
     applyLanguage();
   });
 
+  window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallAppButton();
+  });
+
+  installAppButton.addEventListener('click', function () {
+    if (!deferredInstallPrompt) { return; }
+    var promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    updateInstallAppButton();
+    promptEvent.prompt();
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredInstallPrompt = null;
+    updateInstallAppButton();
+    toast(t('appInstalled'), 'success');
+  });
+
+  if ('windowControlsOverlay' in window.navigator) {
+    window.navigator.windowControlsOverlay.addEventListener('geometrychange', function () {
+      applyInstalledAppMode();
+      window.requestAnimationFrame(function () {
+        Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
+        updateAllGroupGridSpans();
+      });
+    });
+  }
+
   themeToggle.addEventListener('click', function () {
     currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
     window.localStorage.setItem('wssh-theme', currentTheme);
@@ -5086,6 +5162,7 @@
   };
 
   // ---- Bootstrap ---------------------------------------------------------
+  registerServiceWorker();
   applyLanguage();
   applySettingsToControls();
   loadSystemSettings();
@@ -5097,7 +5174,11 @@
   }
   refreshGroupSelect();
   updateSummary();
-  setStatus(t('readyDetail'));
+  if (!applyInstalledAppMode() && isInstalledApp()) {
+    setStatus(t('titlebarOverlayUnavailable'));
+  } else {
+    setStatus(t('readyDetail'));
+  }
   loadSshConfigHosts();
   restoreSessions();
 })();

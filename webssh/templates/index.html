@@ -4,16 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TermFleet-SSH</title>
+    <meta name="theme-color" id="theme-color" content="#ffffff">
     <script>
       try {
         if (window.localStorage.getItem('wssh-theme') === 'dark') {
           document.documentElement.setAttribute('data-theme', 'dark');
+          document.getElementById('theme-color').setAttribute('content', '#0b1220');
         }
       } catch (error) {
         // Keep the default light theme when browser storage is unavailable.
       }
     </script>
-    <link href="static/img/favicon.png" rel="icon" type="image/png">
+    <link href="/static/manifest.webmanifest" rel="manifest">
+    <link href="/static/img/app-icon-32.png" rel="icon" sizes="32x32" type="image/png">
+    <link href="/static/img/app-icon-16.png" rel="icon" sizes="16x16" type="image/png">
+    <link href="/static/img/app-icon-install-180.png" rel="apple-touch-icon" sizes="180x180">
     <link href="static/css/xterm.min.css" rel="stylesheet" type="text/css">
     <link href="static/css/fullscreen.min.css" rel="stylesheet" type="text/css">
     <!-- Web fonts are progressive enhancement; system fonts are used if offline. -->
@@ -37,7 +42,7 @@
         --bg-top: #ffffff;
         --bg-mid: #f4f6fb;
         --bg-bottom: #e9edf6;
-        --bg-primary-glow: rgba(79, 70, 229, 0.1);
+        --bg-primary-glow: rgba(65, 118, 230, 0.08);
         --bg-accent-glow: rgba(22, 163, 74, 0.08);
         --panel: rgba(255, 255, 255, 0.9);
         --panel-solid: #ffffff;
@@ -48,10 +53,10 @@
         --faint: #64748b;
         --line: #dce3ef;
         --line-strong: #cbd5e1;
-        --primary: #4f46e5;
-        --primary-rgb: 79, 70, 229;
-        --primary-strong: #3730a3;
-        --primary-tint: #eef2ff;
+        --primary: #4176e6;
+        --primary-rgb: 65, 118, 230;
+        --primary-strong: #3568ce;
+        --primary-tint: #eef3fe;
         --accent: #16a34a;
         --accent-strong: #15803d;
         --accent-tint: #ecfdf5;
@@ -61,7 +66,7 @@
         --on-primary: #ffffff;
         --on-accent: #ffffff;
         --on-danger: #ffffff;
-        --primary-hover-line: #c7d2fe;
+        --primary-hover-line: #a2bbf1;
         --danger-line: #fecaca;
         --rail-bg: rgba(255, 255, 255, 0.94);
         --group-bg: rgba(255, 255, 255, 0.72);
@@ -78,7 +83,9 @@
         --segment-active-ink: #0f172a;
         --segment-active-line: #e2e8f0;
         --segment-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-        --brand-end: #6366f1;
+        --scrollbar-thumb: #cbd5e1;
+        --scrollbar-thumb-hover: #94a3b8;
+        --scrollbar-thumb-active: #64748b;
         --terminal: #0a0f1f;
         --terminal-head: #0f1729;
         --terminal-line: #1e293b;
@@ -139,7 +146,9 @@
         --segment-active-ink: #f8fafc;
         --segment-active-line: #3b82f6;
         --segment-shadow: 0 1px 3px rgba(0, 0, 0, 0.32);
-        --brand-end: #2563eb;
+        --scrollbar-thumb: #3b4a63;
+        --scrollbar-thumb-hover: #52637e;
+        --scrollbar-thumb-active: #64748b;
         --shadow-sm: 0 4px 14px rgba(0, 0, 0, 0.24);
         --shadow-md: 0 12px 30px rgba(0, 0, 0, 0.32);
         --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.46);
@@ -186,6 +195,42 @@
         outline: 3px solid rgba(var(--primary-rgb), 0.32);
         outline-offset: 2px;
         border-radius: 6px;
+      }
+
+      body :not(.xterm-viewport) {
+        scrollbar-color: var(--scrollbar-thumb) transparent;
+        scrollbar-width: thin;
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar-thumb {
+        min-width: 36px;
+        min-height: 36px;
+        background: var(--scrollbar-thumb);
+        background-clip: padding-box;
+        border: 2px solid transparent;
+        border-radius: 999px;
+        transition: background-color 160ms ease;
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar-thumb:active {
+        background-color: var(--scrollbar-thumb-active);
+      }
+
+      body :not(.xterm-viewport)::-webkit-scrollbar-corner {
+        background: transparent;
       }
 
       .skip-link {
@@ -351,10 +396,27 @@
         width: 44px;
         height: 44px;
         place-items: center;
-        color: var(--on-primary);
-        background: linear-gradient(135deg, var(--primary) 0%, var(--brand-end) 100%);
+        background: #ffffff;
+        border: 1px solid var(--line-strong);
         border-radius: 12px;
-        box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.32);
+        box-shadow: var(--shadow-sm);
+        transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .brand-mark img {
+        display: block;
+        width: 34px;
+        height: 34px;
+        transition: filter 180ms ease, opacity 180ms ease;
+      }
+
+      html[data-theme="dark"] .brand-mark {
+        background: var(--panel-soft);
+      }
+
+      html[data-theme="dark"] .brand-mark img {
+        filter: invert(1);
+        opacity: 0.92;
       }
 
       .brand h1 {
@@ -429,7 +491,7 @@
         color: var(--on-primary);
         background: var(--primary);
         border-color: var(--primary);
-        box-shadow: 0 8px 18px rgba(var(--primary-rgb), 0.28);
+        box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.18);
       }
 
       .btn-primary:hover {
@@ -1443,7 +1505,6 @@
         min-width: 0;
         padding: 2px;
         overflow-x: auto;
-        scrollbar-width: thin;
       }
 
       .host-manager-group-item {
@@ -1896,7 +1957,6 @@
         border: 1px solid var(--line-strong);
         border-radius: var(--radius-sm);
         box-shadow: var(--shadow-md);
-        scrollbar-width: thin;
       }
 
       .broadcast-history[hidden] {
@@ -2330,6 +2390,24 @@
         text-align: left;
       }
 
+      .terminal-placeholder .btn-primary {
+        color: #e2e8f0;
+        background: #111827;
+        border-color: #3b4a63;
+        box-shadow: 0 4px 12px rgba(2, 6, 23, 0.28);
+      }
+
+      .terminal-placeholder .btn-primary:hover {
+        color: #f8fafc;
+        background: #182235;
+        border-color: #64748b;
+        box-shadow: 0 5px 14px rgba(2, 6, 23, 0.34);
+      }
+
+      .terminal-placeholder .btn-primary:focus-visible {
+        outline-color: rgba(148, 163, 184, 0.48);
+      }
+
       .resize-handle {
         display: flex;
         align-items: center;
@@ -2671,6 +2749,169 @@
         }
       }
 
+      @media (display-mode: window-controls-overlay) {
+        .app-shell {
+          padding: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 40px) + 8px) 8px 8px;
+        }
+
+        .topbar,
+        .app-shell.panels-pinned .topbar {
+          position: fixed;
+          inset: env(titlebar-area-y, 0px) auto auto env(titlebar-area-x, 0px);
+          z-index: 30;
+          width: env(titlebar-area-width, 100%);
+          height: env(titlebar-area-height, 40px);
+          margin: 0;
+          app-region: drag;
+          -webkit-app-region: drag;
+        }
+
+        .topbar-rail,
+        .app-shell.panels-pinned .topbar-rail {
+          display: none;
+        }
+
+        .topbar-panel,
+        .app-shell.panels-pinned .topbar-panel {
+          position: absolute;
+          inset: 0;
+          min-width: 0;
+          height: 100%;
+          padding: 4px 8px;
+          gap: 10px;
+          overflow: hidden;
+          background: var(--bg-top);
+          border: 0;
+          border-bottom: 1px solid var(--line);
+          border-radius: 0;
+          box-shadow: none;
+          backdrop-filter: none;
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: none;
+          app-region: drag;
+          -webkit-app-region: drag;
+        }
+
+        .topbar:focus-within .topbar-panel,
+        .app-shell.panels-pinned .topbar:focus-within .topbar-panel {
+          box-shadow: none;
+        }
+
+        .topbar-panel button {
+          app-region: no-drag;
+          -webkit-app-region: no-drag;
+        }
+
+        .topbar-panel .brand {
+          flex: 0 1 auto;
+          gap: 8px;
+        }
+
+        .topbar-panel .brand-mark {
+          width: 28px;
+          height: 28px;
+          border-radius: 8px;
+          box-shadow: none;
+        }
+
+        .topbar-panel .brand-mark img {
+          width: 22px;
+          height: 22px;
+        }
+
+        .topbar-panel .brand h1 {
+          font-size: 14px;
+          white-space: nowrap;
+        }
+
+        .topbar-panel .brand p {
+          display: none;
+        }
+
+        .topbar-panel .top-actions {
+          min-width: 0;
+          gap: 6px;
+          flex-wrap: nowrap;
+        }
+
+        .topbar-panel .top-actions .btn {
+          flex: 0 0 auto;
+          min-width: 0;
+          min-height: 28px;
+          height: 28px;
+          padding: 0 9px;
+          gap: 5px;
+          border-radius: 7px;
+          font-size: 12px;
+        }
+
+        .topbar-panel .top-actions .btn-icon {
+          width: 30px;
+          padding: 0;
+        }
+
+        .topbar-panel .top-actions svg {
+          width: 16px;
+          height: 16px;
+        }
+      }
+
+      @media (display-mode: window-controls-overlay) and (max-width: 900px) {
+        .topbar-panel .brand {
+          display: none;
+        }
+
+        .topbar-panel .top-actions {
+          width: 100%;
+          justify-content: flex-end;
+        }
+
+        .topbar-panel #open-host-manager,
+        .topbar-panel #open-system-settings,
+        .topbar-panel #add-group,
+        .topbar-panel #disconnect-all {
+          width: 30px;
+          padding: 0;
+        }
+
+        .topbar-panel #open-host-manager span,
+        .topbar-panel #open-system-settings span,
+        .topbar-panel #add-group span,
+        .topbar-panel #disconnect-all span {
+          display: none;
+        }
+      }
+
+      html.window-controls-overlay-active .settings-overlay,
+      html.window-controls-overlay-active .file-upload-overlay,
+      html.window-controls-overlay-active .host-manager-overlay,
+      html.window-controls-overlay-active .log-overlay {
+        top: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 40px));
+      }
+
+      html.installed-app-mode:not(.window-controls-overlay-active) .topbar {
+        position: relative;
+        inset: auto;
+        flex: 0 0 auto;
+        height: auto;
+        margin-bottom: 8px;
+      }
+
+      html.installed-app-mode:not(.window-controls-overlay-active) .topbar-rail {
+        display: none;
+      }
+
+      html.installed-app-mode:not(.window-controls-overlay-active) .topbar-panel {
+        position: relative;
+        inset: auto;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: none;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         *,
         *::before,
@@ -2695,9 +2936,7 @@
         <div class="topbar-panel">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="m5 8 4 4-4 4M13 16h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+              <img src="/static/img/app-icon-64.png" alt="" width="34" height="34">
             </div>
             <div>
               <h1 data-i18n="appTitle">TermFleet-SSH</h1>
@@ -2711,6 +2950,12 @@
               </svg>
             </button>
             <button class="btn btn-lang" type="button" id="language-toggle" aria-label="切换语言" title="切换语言" data-i18n-title="toggleLanguage" data-i18n-aria-label="toggleLanguage">EN</button>
+            <button class="btn hide" type="button" id="install-app" data-i18n-title="installApp" data-i18n-aria-label="installApp" title="安装应用" aria-label="安装应用">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span data-i18n="installApp">安装应用</span>
+            </button>
             <button class="btn" type="button" id="open-host-manager" aria-keyshortcuts="Control+Shift+H Meta+Shift+H" data-i18n-title="hostManager" data-i18n-aria-label="hostManager" title="主机管理" aria-label="主机管理">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/>

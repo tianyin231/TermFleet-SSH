@@ -626,6 +626,11 @@ class TestAppInDebugMode(OtherTestBase):
         self.assertIn(b'id="select-all-ssh-config"', response.body)
         self.assertIn(b'id="open-selected-ssh-config"', response.body)
 
+    def test_service_worker(self):
+        response = self.fetch('/service-worker.js', method='GET')
+        self.assertEqual(response.code, 200)
+        self.assertIn(b"addEventListener('fetch'", response.body)
+
 
 class TestAppWithLargeBuffer(OtherTestBase):
 

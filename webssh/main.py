@@ -1,4 +1,5 @@
 import logging
+import os
 import tornado.web
 import tornado.ioloop
 
@@ -31,7 +32,10 @@ def make_handlers(loop, options):
         (r'/active-workers', ActiveWorkersHandler),
         (r'/local-terminal', LocalTerminalHandler, dict(loop=loop)),
         (r'/upload', UploadHandler, dict(loop=loop)),
-        (r'/ws', WsockHandler, dict(loop=loop))
+        (r'/ws', WsockHandler, dict(loop=loop)),
+        (r'/(service-worker\.js)', tornado.web.StaticFileHandler, dict(
+            path=os.path.join(os.path.dirname(__file__), 'static')
+        ))
     ]
     return handlers
 

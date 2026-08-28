@@ -7,9 +7,10 @@ Verified against the repository on 2026-08-11. Re-check affected facts against s
 TermFleet-SSH is a browser-based SSH fleet workspace derived from WebSSH. It supports:
 
 - multiple xterm.js terminal cards grouped in horizontally resizable, reorderable work groups;
-- a browser-persisted day/night workspace theme toggle that changes non-terminal surfaces while preserving the terminal and xterm palette;
+- a browser-persisted day/night workspace theme toggle that changes non-terminal surfaces and shared refined horizontal/vertical workspace scrollbars while preserving the terminal and xterm palette;
+- an installable Chrome/Edge PWA surface with a custom black-and-white fleet-terminal icon whose in-app rendering adapts to the light/dark workspace theme while its OS installation exports retain a fixed opaque white background, manifest metadata, a network-only root-scope service worker for crafted installation without caching terminal traffic, address-bar installation support, a browser title-bar tint that follows the saved theme, a runtime-detected Window Controls Overlay layout that moves the compact toolbar into the installed desktop app title bar while respecting platform controls (or pins the ordinary toolbar at the top when unavailable), and a bilingual top-toolbar install action that appears only when the browser exposes its native install prompt;
 - layered top-toolbar and connection-sidebar controls that can auto-collapse into small overlay cues or remain persistently expanded through a saved customizable cross-platform shortcut, plus a shared connection form that can move into a modal from the left cue or Ctrl/Command+Shift+C;
-- SSH password, uploaded private key, private-key passphrase, and TOTP authentication;
+- SSH password, uploaded private key, private-key passphrase, and TOTP authentication, with single-terminal connection and reauthentication dialogs staying open while credentials are checked, closing only after backend SSH setup succeeds, and preserving the form with an explicit failure message when validation fails;
 - a top-right host manager opened by button or Ctrl/Command+Shift+H, with compact group switching, creation, and quick deletion, SSH-config hosts on the left, current-group terminals plus reconnect/maximize/close controls on the right, alias-first terminal titles, click-to-toggle multi-select, and additive Shift range selection;
 - a top-right system-settings modal for terminal and connection preferences, configurable SSH setup concurrency, plus conflict-checked, cross-platform shortcut bindings for common toolbar actions;
 - server-local shell sessions through a PTY;
@@ -57,6 +58,7 @@ Worker -> PTYChannel -> server-local shell process
 | `webssh/utils.py` | Encoding, address, hostname, origin, and domain helpers |
 | `webssh/templates/index.html` | Entire page markup and application CSS |
 | `webssh/static/js/main.js` | Entire client application: state, rendering, transport, persistence, i18n, drag/resize, logs |
+| `webssh/static/manifest.webmanifest`, `webssh/static/service-worker.js`, `webssh/static/img/app-icon-*` | Installable-app identity, launch metadata, network-only root-scope service worker, favicon, regular PWA icons, and maskable icon exports |
 | `tests/sshserver.py` | In-process Paramiko SSH test server |
 | `tests/test_app.py` | Main HTTP, SSH-authentication, WebSocket, policy, origin, size, and encoding integration coverage |
 | `tests/test_handler.py` | Handler helpers, private keys, origin/client address, SSH config, WebSocket edge cases |
@@ -178,6 +180,7 @@ Coverage is strongest for inherited SSH authentication, request validation, poli
 - repeated real-browser detach/rebind sequences beyond the generation-guard unit coverage;
 - client persistence schema and migrations;
 - group/card drag, resize, fullscreen, reconnect, broadcast, latency, i18n, logs, and responsive layout;
+- real-browser PWA install-prompt eligibility, toolbar installation, installed display mode, and OS-specific icon masking;
 - authorization implications of local shells and global settings;
 - multiple app processes or multiple users behind one IP.
 
@@ -191,3 +194,5 @@ Add focused tests around the changed behavior instead of relying only on the inh
 - `Dockerfile` uses `python:3-alpine`, installs dependencies, creates an unprivileged `webssh` user with `/bin/false`, and runs `python run.py`.
 - `docker-compose.yml` builds the repository and publishes port 8888.
 - Reverse proxies must forward WebSocket Upgrade headers. Correct `xheaders` and `trusted_downstream` settings are part of client ownership and security.
+- PWA installation prompts require a secure context in production, so deployments intended for Chrome/Edge installation must expose the workspace over HTTPS; `localhost` remains the browser development exception.
+- The Window Controls Overlay is activated only when `navigator.windowControlsOverlay.visible` is true. Installed/manual app windows that do not expose it pin the ordinary in-app toolbar at the top instead; an HTTP LAN IP remains ineligible because the overlay and root-scope service worker require a secure context.
