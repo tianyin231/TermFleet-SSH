@@ -34,6 +34,7 @@ https://github.com/huashengdun/webssh
 - Python 3.10+
 - 现代浏览器，例如 Chrome、Edge、Firefox、Safari
 - 需要远程 SSH 时，服务端应能访问目标主机的 SSH 端口
+- Linux 或 macOS 服务端支持全部功能；Windows 服务端支持 SSH 相关功能，但“本机终端”入口会自动隐藏
 
 ## 安装
 
@@ -192,7 +193,7 @@ wssh --sshconfig='/path/to/ssh_config'
 
 ### 本机终端
 
-右上角“本机终端”会打开服务端本机 shell。它和 SSH 终端使用相同的窗口、分组、日志、重连和关闭逻辑。
+右上角“本机终端”会打开服务端本机 shell。它和 SSH 终端使用相同的窗口、分组、日志、重连和关闭逻辑。本机终端依赖 Unix PTY，仅在 Linux 或 macOS 服务端可用；Windows 服务端会自动隐藏该入口。
 
 ### 上传文件
 

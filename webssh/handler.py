@@ -3,10 +3,10 @@ import getpass
 import json
 import logging
 import os
-import pty
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import traceback
@@ -14,6 +14,9 @@ import weakref
 import paramiko
 import tornado.gen
 import tornado.web
+
+if sys.platform != 'win32':
+    import pty
 
 from concurrent.futures import ThreadPoolExecutor
 from tornado.ioloop import IOLoop
@@ -466,6 +469,10 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
         self.result = dict(id=None, status=None, encoding='utf-8')
 
     def post(self):
+        if sys.platform == 'win32':
+            raise tornado.web.HTTPError(
+                400, 'Local terminal is not supported on this platform.'
+            )
         ip, port = self.get_client_addr()
         if len(clients.get(ip, {})) >= options.maxconn:
             raise tornado.web.HTTPError(403, 'Too many live connections.')
@@ -764,7 +771,8 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         pass
 
     def get(self):
-        self.render('index.html', debug=self.debug, font=self.font)
+        self.render('index.html', debug=self.debug, font=self.font,
+                    local_terminal=sys.platform != 'win32')
 
     @tornado.gen.coroutine
     def post(self):

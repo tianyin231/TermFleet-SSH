@@ -680,6 +680,7 @@
   var reauthTargetName = $('#reauth-target-name');
   var reauthTargetMeta = $('#reauth-target-meta');
   var openLocalTerminalButton = $('#open-local-terminal');
+  var localTerminalEnabled = window.WSSH_LOCAL_TERMINAL !== false;
   var fileUploadPicker = $('#file-upload-picker');
   var fileUploadOverlay = $('#file-upload-overlay');
   var closeFileUploadButton = $('#close-file-upload');
@@ -3826,6 +3827,7 @@
   }
 
   function openLocalTerminal() {
+    if (!localTerminalEnabled) { return; }
     var groupId = groupSelect.value || (groups[0] && groups[0].id);
     var record = createCard({
       hostname: 'localhost',
@@ -4939,7 +4941,11 @@
     renderHostManagerTerminals();
     focusHostManagerGroup();
   });
-  openLocalTerminalButton.addEventListener('click', openLocalTerminal);
+  if (localTerminalEnabled) {
+    openLocalTerminalButton.addEventListener('click', openLocalTerminal);
+  } else {
+    openLocalTerminalButton.style.display = 'none';
+  }
   fileUploadPicker.addEventListener('change', function () {
     var file = fileUploadPicker.files && fileUploadPicker.files[0];
     if (file && uploadPickerRecords.length) {

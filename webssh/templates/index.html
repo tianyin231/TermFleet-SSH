@@ -3335,6 +3335,9 @@
 
     <script src="static/js/xterm.min.js"></script>
     <script src="static/js/xterm-addon-fit.min.js"></script>
+    <script>
+      window.WSSH_LOCAL_TERMINAL = {{ 'true' if local_terminal else 'false' }};
+    </script>
     <script src="static/js/main.js"></script>
   </body>
 </html>
