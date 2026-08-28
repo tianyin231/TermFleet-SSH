@@ -3509,6 +3509,15 @@
     record.savedHeight = record.body.style.height;
     record.body.style.height = '';
     record.card.classList.add('maximized');
+    appShell.classList.add('terminal-maximized');
+    record.nativeFullscreen = false;
+    if (record.card.requestFullscreen && !document.fullscreenElement) {
+      record.nativeFullscreen = true;
+      var fullscreenRequest = record.card.requestFullscreen();
+      if (fullscreenRequest && fullscreenRequest.catch) {
+        fullscreenRequest.catch(function () { record.nativeFullscreen = false; });
+      }
+    }
     window.requestAnimationFrame(function () {
       fitTerminal(record);
       if (record.term) { record.term.focus(); }
@@ -3517,10 +3526,26 @@
 
   function unmaximize(record) {
     record.card.classList.remove('maximized');
+    appShell.classList.remove('terminal-maximized');
+    record.nativeFullscreen = false;
+    if (document.fullscreenElement === record.card && document.exitFullscreen) {
+      var fullscreenExit = document.exitFullscreen();
+      if (fullscreenExit && fullscreenExit.catch) { fullscreenExit.catch(function () {}); }
+    }
     if (record.savedHeight) { record.body.style.height = record.savedHeight; }
     if (backdrop) { backdrop.remove(); backdrop = null; }
     window.requestAnimationFrame(function () { fitTerminal(record); });
   }
+
+  document.addEventListener('fullscreenchange', function () {
+    if (document.fullscreenElement) { return; }
+    Object.keys(terminals).forEach(function (id) {
+      var record = terminals[id];
+      if (!record.nativeFullscreen || !record.card.classList.contains('maximized')) { return; }
+      var button = record.card.querySelector('.maximize-terminal');
+      toggleMaximize(record, button);
+    });
+  });
 
   // ---- SSH transport (unchanged contract) --------------------------------
   var LOG_BUFFER_LIMIT = 1024 * 1024;

@@ -2437,12 +2437,25 @@
         box-shadow: var(--shadow-lg);
       }
 
+      .terminal-card.maximized:fullscreen {
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
       .terminal-card.maximized .terminal-body {
         flex: 1;
         height: auto;
       }
 
       .terminal-card.maximized .resize-handle {
+        display: none;
+      }
+
+      .app-shell.terminal-maximized .topbar {
         display: none;
       }
 
@@ -2454,7 +2467,6 @@
         padding: 8px;
       }
 
-      .app-shell.group-fullscreen .topbar,
       .app-shell.group-fullscreen .sidebar {
         display: none;
       }
@@ -2756,10 +2768,6 @@
 
         .app-shell.group-fullscreen {
           padding: calc(env(titlebar-area-y, 0px) + env(titlebar-area-height, 40px) + 8px) 8px 8px;
-        }
-
-        .app-shell.group-fullscreen .topbar {
-          display: block;
         }
 
         .topbar,
