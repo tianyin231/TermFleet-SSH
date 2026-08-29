@@ -264,7 +264,42 @@
       logRestored: '恢复终端 {name}',
       restoringSessions: '正在恢复终端...',
       localTerminalFailed: '打开本机终端失败。',
-      savedSettings: '系统设置已保存。'
+      savedSettings: '系统设置已保存。',
+      modeFocus: '聚焦模式',
+      modeWorkspace: '工作台模式',
+      focusMode: '聚焦模式',
+      toggleFocusMode: '切换聚焦模式',
+      focusSidebar: '侧栏',
+      focusSidebarToggle: '侧栏',
+      focusCloseSidebar: '收起侧栏',
+      focusActionsTitle: '快捷操作',
+      sidebarTheme: '主题',
+      sidebarLanguage: '语言',
+      focusHistoryHint: '点击回填到主终端，不自动执行。',
+      focusHistoryEmpty: '该分组暂无广播历史。',
+      focusEmpty: '没有已打开的终端',
+      focusEmptyHint: '从连接表单或主机管理器打开终端',
+      focusActivateTab: '切换到 {name}',
+      focusCloseTab: '关闭 {name}',
+      logFocusMode: '切换到{mode}',
+      shellAuto: '自动选择',
+      shellCmd: 'CMD 命令提示符',
+      shellPowershell: 'Windows PowerShell',
+      shellPwsh: 'PowerShell 7',
+      shellGroupLabel: 'Shell 类型',
+      localTerminalHint: '选择要打开的 shell。',
+      localTerminalOpen: '打开',
+      clusterPanelTitle: '同步广播',
+      clusterOff: '关',
+      clusterSyncCount: '同步 {count} 台',
+      clusterRunning: '逐行发送 {index}/{total}',
+      clusterPending: '将同步:',
+      clusterStop: '停止',
+      clusterIdle: '未开启同步',
+      clusterDisabled: '没有聚焦的终端',
+      cycleClusterSend: '切换同步广播',
+      clusterDiffCount: '差异 {count}',
+      clusterNotDelivered: '{count} 台未送达'
     },
     en: {
       langCode: 'en',
@@ -499,7 +534,42 @@
       logRestored: 'Restore terminal {name}',
       restoringSessions: 'Restoring terminals...',
       localTerminalFailed: 'Failed to open local terminal.',
-      savedSettings: 'System settings saved.'
+      savedSettings: 'System settings saved.',
+      modeFocus: 'Focus mode',
+      modeWorkspace: 'Workspace mode',
+      focusMode: 'Focus mode',
+      toggleFocusMode: 'Toggle focus mode',
+      focusSidebar: 'Sidebar',
+      focusSidebarToggle: 'Sidebar',
+      focusCloseSidebar: 'Collapse sidebar',
+      focusActionsTitle: 'Quick actions',
+      sidebarTheme: 'Theme',
+      sidebarLanguage: 'Language',
+      focusHistoryHint: 'Click to fill into the main terminal without running it.',
+      focusHistoryEmpty: 'No broadcast history for this group yet.',
+      focusEmpty: 'No open terminals',
+      focusEmptyHint: 'Open a terminal from the connect form or the host manager',
+      focusActivateTab: 'Switch to {name}',
+      focusCloseTab: 'Close {name}',
+      logFocusMode: 'Switched to {mode}',
+      shellAuto: 'Automatic',
+      shellCmd: 'CMD',
+      shellPowershell: 'Windows PowerShell',
+      shellPwsh: 'PowerShell 7',
+      shellGroupLabel: 'Shell type',
+      localTerminalHint: 'Choose the shell to open.',
+      localTerminalOpen: 'Open',
+      clusterPanelTitle: 'Cluster broadcast',
+      clusterOff: 'Off',
+      clusterSyncCount: 'Syncing {count} terminals',
+      clusterRunning: 'Sending {index}/{total}',
+      clusterPending: 'To send:',
+      clusterStop: 'Stop',
+      clusterIdle: 'Cluster sync off',
+      clusterDisabled: 'No focused terminal',
+      cycleClusterSend: 'Toggle cluster broadcast',
+      clusterDiffCount: '{count} differ',
+      clusterNotDelivered: '{count} not delivered'
     }
   };
 
@@ -519,6 +589,8 @@
   var DEFAULT_SHORTCUTS = {
     connectServer: 'mod+shift+c',
     togglePersistentPanels: 'mod+alt+p',
+    toggleFocusMode: '',
+    cycleClusterSend: '',
     toggleBroadcastScope: 'mod+alt+s',
     hostManager: 'mod+shift+h',
     systemSettings: 'mod+shift+,',
@@ -530,6 +602,8 @@
   var SHORTCUT_ACTIONS = [
     { id: 'connectServer', labelKey: 'connectServer', buttonSelector: '.sidebar-rail' },
     { id: 'togglePersistentPanels', labelKey: 'togglePersistentPanels', buttonSelector: '.topbar-rail' },
+    { id: 'toggleFocusMode', labelKey: 'toggleFocusMode', buttonSelector: '#mode-toggle' },
+    { id: 'cycleClusterSend', labelKey: 'cycleClusterSend', buttonSelector: '#cluster-send-widget' },
     { id: 'toggleBroadcastScope', labelKey: 'toggleBroadcastScope', buttonSelector: '.broadcast-scope-widget' },
     { id: 'hostManager', labelKey: 'hostManager', buttonSelector: '#open-host-manager' },
     { id: 'systemSettings', labelKey: 'systemSettings', buttonSelector: '#open-system-settings' },
@@ -539,6 +613,10 @@
   ];
 
   var BROADCAST_HISTORY_LIMIT = 100;
+  var GROUP_COLOR_PALETTE = [
+    '#4176e6', '#0d9488', '#16a34a', '#d97706',
+    '#7c3aed', '#db2777', '#2563eb', '#ca8a04'
+  ];
   var BATCH_SOCKET_WAVE_SIZE = 8;
   var BATCH_SOCKET_WAVE_DELAY = 0;
   var BATCH_SOCKET_RETRY_DELAY = 2000;
@@ -593,6 +671,7 @@
   var drag = null;          // active card drag session
   var columnDrag = null;    // active column drag session
   var focusedGroupId = null;
+  var focusActiveId = null; // terminal id hosted by the focus-mode main panel
   var operationLogs = loadLogs();
   var broadcastHistory = loadBroadcastHistory();
   var broadcastEditors = {};  // {groupId: input/sendBtn/sendLabel/uploadBtn/shortcutSelect/line controls}
@@ -611,6 +690,8 @@
   var uploadPreviousFocus = null;
   var logSaveState = null;
   var logSavePreviousFocus = null;
+  var localTerminalPreviousFocus = null;
+  var localTerminalGroupId = null;
   var boardWheelLocked = false;
   var deferredInstallPrompt = null;
 
@@ -624,6 +705,12 @@
   var connectForm = $('#connect');
   var connectFormHome = connectForm.parentNode;
   var connectFormNextSibling = connectForm.nextSibling;
+  var focusShell = $('#focus-shell');
+  var focusSidebar = $('#focus-sidebar');
+  var modeToggleButton = $('#mode-toggle');
+  var modeToggleLabel = $('#mode-toggle-label');
+  var focusSummary = $('#focus-summary');
+  var focusInstallAppButton = $('#focus-install-app');
   var connectButton = $('#connect-button');
   var toastStack = $('#toast-stack');
   var themeToggle = $('#theme-toggle');
@@ -681,6 +768,11 @@
   var reauthTargetMeta = $('#reauth-target-meta');
   var openLocalTerminalButton = $('#open-local-terminal');
   var localTerminalEnabled = window.WSSH_LOCAL_TERMINAL !== false;
+  var localTerminalOverlay = $('#local-terminal-overlay');
+  var localTerminalShellList = $('#local-terminal-shells');
+  var localTerminalOpenShellButton = $('#open-local-terminal-shell');
+  var cancelLocalTerminalButton = $('#cancel-local-terminal');
+  var closeLocalTerminalButton = $('#close-local-terminal');
   var fileUploadPicker = $('#file-upload-picker');
   var fileUploadOverlay = $('#file-upload-overlay');
   var closeFileUploadButton = $('#close-file-upload');
@@ -738,7 +830,13 @@
     minimize: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4v3a2 2 0 0 1-2 2H4M15 4v3a2 2 0 0 0 2 2h3M9 20v-3a2 2 0 0 0-2-2H4M15 20v-3a2 2 0 0 1 2-2h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     moon: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    sun: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+    sun: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    hosts: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><rect x="4" y="14" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    sliders: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h7M15 7h5M11 4v6M4 17h4M12 17h8M8 14v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    doc: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    term: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    globe: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+    power: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
   };
 
   // ---- Helpers -----------------------------------------------------------
@@ -759,6 +857,7 @@
       confirmDisconnect: true,
       broadcastEnter: true,
       panelsPinned: false,
+      uiMode: 'workspace',
       terminalFontSize: 13,
       terminalHeight: 300,
       maxTerminals: 20,
@@ -794,6 +893,90 @@
     window.setTimeout(function () {
       Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
     }, 240);
+  }
+
+  // ---- Focus mode --------------------------------------------------------
+  function isFocusMode() {
+    return appShell.classList.contains('focus-mode');
+  }
+
+  function groupColorValue(group) {
+    return GROUP_COLOR_PALETTE[(Number(group && group.color) || 0) % GROUP_COLOR_PALETTE.length];
+  }
+
+  function recordBodyHeight(record) {
+    if (!record || !record.body) { return ''; }
+    return record.__preFocusHeight || record.body.style.height || '';
+  }
+
+  function refreshModeToggleLabel() {
+    var focus = isFocusMode();
+    modeToggleButton.setAttribute('aria-pressed', focus ? 'true' : 'false');
+    modeToggleLabel.textContent = t(focus ? 'modeWorkspace' : 'modeFocus');
+  }
+
+  function enterFocusMode() {
+    closeConnectionDialog(false);
+    closeSystemSettings(false);
+    appShell.classList.add('focus-mode');
+    focusShell.hidden = false;
+    refreshModeToggleLabel();
+    if (window.WSSH_FOCUS) { window.WSSH_FOCUS.enter(); }
+  }
+
+  function exitFocusMode() {
+    if (window.WSSH_FOCUS) { window.WSSH_FOCUS.leave(); }
+    appShell.classList.remove('focus-mode');
+    focusShell.hidden = true;
+    focusSidebar.classList.remove('is-open');
+    refreshModeToggleLabel();
+  }
+
+  function setUIMode(next) {
+    next = next === 'focus' ? 'focus' : 'workspace';
+    if ((settings.uiMode === 'focus') === (next === 'focus')) { return; }
+    if (appShell.classList.contains('mode-fade')) { return; }
+    if (!closeUploadDialog(false)) { return; }
+    closeReauthentication(false);
+    closeHostManager(false);
+    logOverlay.classList.remove('is-open');
+    settings.uiMode = next;
+    saveSettings();
+    var message = t('logFocusMode', {
+      mode: t(next === 'focus' ? 'modeFocus' : 'modeWorkspace')
+    });
+    // Fade the workspace out, swap the layouts while it is invisible so the
+    // card relocation is never seen, then fade the new mode back in.
+    appShell.classList.add('mode-fade');
+    window.setTimeout(function () {
+      if (next === 'focus') {
+        enterFocusMode();
+        logAction('logFocusMode', { mode: t('modeFocus') });
+      } else {
+        exitFocusMode();
+        logAction('logFocusMode', { mode: t('modeWorkspace') });
+      }
+      setStatus(message);
+      Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
+      window.requestAnimationFrame(function () {
+        appShell.classList.remove('mode-fade');
+      });
+      window.setTimeout(function () {
+        Object.keys(terminals).forEach(function (id) { fitTerminal(terminals[id]); });
+      }, 80);
+    }, 180);
+  }
+
+  function notifyFocusView() {
+    if (window.WSSH_FOCUS) { window.WSSH_FOCUS.sync(); }
+  }
+
+  function applyUIModeIfNeeded() {
+    if (settings.uiMode === 'focus') {
+      enterFocusMode();
+    } else {
+      refreshModeToggleLabel();
+    }
   }
 
   function xsrfToken() {
@@ -1147,9 +1330,9 @@
   }
 
   function updateInstallAppButton() {
-    installAppButton.classList.toggle(
-      'hide', !deferredInstallPrompt || isInstalledApp()
-    );
+    var hidden = !deferredInstallPrompt || isInstalledApp();
+    installAppButton.classList.toggle('hide', hidden);
+    if (focusInstallAppButton) { focusInstallAppButton.classList.toggle('hide', hidden); }
   }
 
   function applyLanguage() {
@@ -1188,6 +1371,8 @@
     updateSummary();
     setStatus(t('readyDetail'));
     applyTheme();
+    refreshModeToggleLabel();
+    notifyFocusView();
   }
 
   function refreshDynamicLanguage() {
@@ -1390,7 +1575,7 @@
       username: record.username,
       port: record.port,
       displayName: record.displayName,
-      bodyHeight: record.body ? record.body.style.height : '',
+      bodyHeight: recordBodyHeight(record),
       isLocal: record.isLocal,
       autoReconnect: record.autoReconnect,
       broadcastSelected: !!record.broadcastSelected,
@@ -1438,12 +1623,14 @@
         name: group.name,
         nameKey: group.nameKey || null,
         number: group.number,
+        color: Math.max(0, Number(group.color) || 0) % GROUP_COLOR_PALETTE.length,
         layoutMode: 'stacked-v1',
         colSpan: column ? Number(column.dataset.colSpan) || null : group.colSpan || null,
         rowSpan: column ? Number(column.dataset.rowSpan) || null : group.rowSpan || null,
         manualSize: column ? column.dataset.manualSize === 'true' : !!group.manualSize,
         pinned: !!group.pinned,
         broadcastSelectedOnly: !!group.broadcastSelectedOnly,
+        clusterSend: !!group.clusterSend,
         lineSend: !!group.lineSend,
         lineSendMode: group.lineSendMode === 'prompt' ? 'prompt' : 'interval',
         lineSendInterval: Math.min(10000, Math.max(0, Number(group.lineSendInterval) || 500)),
@@ -1462,11 +1649,13 @@
         id: item.id,
         nameKey: item.nameKey,
         number: item.number,
+        color: Math.max(0, Number(item.color) || 0),
         colSpan: stackedLayout ? item.colSpan : null,
         rowSpan: stackedLayout ? item.rowSpan : null,
         manualSize: stackedLayout && item.manualSize,
         pinned: !!item.pinned,
         broadcastSelectedOnly: !!item.broadcastSelectedOnly,
+        clusterSend: !!item.clusterSend,
         lineSend: !!item.lineSend,
         lineSendMode: item.lineSendMode === 'prompt' ? 'prompt' : 'interval',
         lineSendInterval: Math.min(10000, Math.max(0, Number(item.lineSendInterval) || 500)),
@@ -1489,7 +1678,7 @@
         username: record.username,
         port: record.port,
         displayName: record.displayName,
-        bodyHeight: record.body ? record.body.style.height : '',
+        bodyHeight: recordBodyHeight(record),
         reconnectInfo: safeReconnectInfo(record.reconnectInfo),
         persistentId: record.persistentId,
         autoReconnect: !!record.autoReconnect,
@@ -1910,6 +2099,7 @@
     closeReauthentication(false);
     closeHostManager(false);
     closeSystemSettings(false);
+    closeLocalTerminalDialog(false);
     logOverlay.classList.remove('is-open');
     connectionDialogBody.appendChild(connectForm);
     connectionOverlay.classList.add('is-open');
@@ -1934,6 +2124,7 @@
     closeReauthentication(false);
     closeConnectionDialog(false);
     closeSystemSettings(false);
+    closeLocalTerminalDialog(false);
     logOverlay.classList.remove('is-open');
     if (groupById(groupSelect.value)) { hostManagerGroupId = groupSelect.value; }
     hostManagerOverlay.classList.add('is-open');
@@ -1956,7 +2147,8 @@
   function modalReturnFocus(fallback) {
     var active = document.activeElement;
     if (!active || connectionOverlay.contains(active) || hostManagerOverlay.contains(active) || systemSettingsOverlay.contains(active) ||
-        reauthOverlay.contains(active) || fileUploadOverlay.contains(active) || logOverlay.contains(active)) {
+        reauthOverlay.contains(active) || fileUploadOverlay.contains(active) || logOverlay.contains(active) ||
+        localTerminalOverlay.contains(active)) {
       return fallback;
     }
     return active;
@@ -1968,6 +2160,7 @@
     closeReauthentication(false);
     closeConnectionDialog(false);
     closeHostManager(false);
+    closeLocalTerminalDialog(false);
     logOverlay.classList.remove('is-open');
     renderShortcutSettings();
     systemSettingsOverlay.classList.add('is-open');
@@ -2259,6 +2452,7 @@
       if (terminals[id].state === 'connected') { connected += 1; }
     });
     summary.textContent = t('connectedSummary', { count: connected, groups: groupCountText(groups.length) });
+    if (focusSummary) { focusSummary.textContent = summary.textContent; }
 
     groups.forEach(function (group) {
       refreshBroadcastSelection(group.id);
@@ -2312,12 +2506,20 @@
   }
 
   function updateGroupPinButton(group, button) {
+    // The focus-mode chip pin has no workspace button element; fall back to
+    // the column's own pin button and tolerate its absence (hidden board).
+    var target = button;
+    if (!target) {
+      var column = board.querySelector('.group[data-group="' + group.id + '"]');
+      target = column ? column.querySelector('.pin-group') : null;
+    }
+    if (!target) { return; }
     var pinned = !!group.pinned;
-    button.classList.toggle('is-active', pinned);
-    button.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-    button.setAttribute('title', t(pinned ? 'unpinGroup' : 'pinGroup'));
-    button.setAttribute('aria-label', t(pinned ? 'unpinGroup' : 'pinGroup'));
-    button.innerHTML = pinned ? ICONS.pinActive : ICONS.pin;
+    target.classList.toggle('is-active', pinned);
+    target.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    target.setAttribute('title', t(pinned ? 'unpinGroup' : 'pinGroup'));
+    target.setAttribute('aria-label', t(pinned ? 'unpinGroup' : 'pinGroup'));
+    target.innerHTML = pinned ? ICONS.pinActive : ICONS.pin;
   }
 
   function toggleGroupPinned(group, button) {
@@ -2374,6 +2576,10 @@
     });
 
     var title = el('div', { class: 'group-title' }, [
+      el('span', {
+        class: 'group-color-dot', 'aria-hidden': 'true',
+        style: 'background:' + groupColorValue(group)
+      }),
       nameEl,
       el('span', { class: 'group-meta', dataset: { meta: group.id }, text: terminalCountText(0) })
     ]);
@@ -2798,6 +3004,7 @@
         logAction('logRenameGroup', { oldName: oldName, newName: value });
       }
       saveGroups();
+      notifyFocusView();
       saveSessions();
     });
 
@@ -2825,11 +3032,14 @@
       name: nameKey ? t(nameKey, { number: number }) : (name || t('defaultGroup', { number: number })),
       nameKey: nameKey || (name ? null : 'defaultGroup'),
       number: number,
+      color: typeof opts.color === 'number' && opts.color >= 0 ?
+        opts.color % GROUP_COLOR_PALETTE.length : (number - 1) % GROUP_COLOR_PALETTE.length,
       colSpan: opts.colSpan || null,
       rowSpan: opts.rowSpan || null,
       manualSize: !!opts.manualSize,
       pinned: !!opts.pinned,
       broadcastSelectedOnly: !!opts.broadcastSelectedOnly,
+      clusterSend: !!opts.clusterSend,
       lineSend: !!opts.lineSend,
       lineSendMode: opts.lineSendMode === 'prompt' ? 'prompt' : 'interval',
       lineSendInterval: Math.min(10000, Math.max(0, Number(opts.lineSendInterval) || 500)),
@@ -2876,6 +3086,7 @@
     updateSummary();
     saveGroups();
     saveSessions();
+    notifyFocusView();
   }
 
   function selectAll(node) {
@@ -2993,11 +3204,13 @@
         toast(t('terminalRenamed'));
         logAction('logRenameTerminal', { oldName: oldName, newName: next });
         saveSessions();
+        notifyFocusView();
       }
     });
     startResize(resizeHandle, record);
 
     updateSummary();
+    notifyFocusView();
     return record;
   }
 
@@ -3011,6 +3224,7 @@
     if (uploadButton) { uploadButton.disabled = state !== 'connected'; }
     setNetworkState(record, state === 'connected' ? 'online' : (state === 'connecting' ? 'connecting' : 'offline'));
     updateSummary();
+    notifyFocusView();
   }
 
   function setNetworkState(record, state) {
@@ -3023,6 +3237,7 @@
       record.networkText.dataset.latency = state;
     }
     record.networkText.dataset.network = state;
+    notifyFocusView();
   }
 
   function latencyLevel(latency) {
@@ -3127,10 +3342,14 @@
     updateSummary();
     updateEmptyState(group);
     updateGroupGridSpan(group);
+    notifyFocusView();
   }
 
   function fitTerminal(record) {
     if (!record || !record.term) { return; }
+    // A card inside a hidden container has no layout; fitting there would
+    // lock the PTY to the minimum fallback size until the next visible fit.
+    if (!record.body.clientWidth || !record.body.clientHeight) { return; }
     try {
       record.term.fitAddon.fit();
     } catch (e) {
@@ -3152,6 +3371,7 @@
     closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
+    closeLocalTerminalDialog(false);
     logOverlay.classList.remove('is-open');
     reauthForm.reset();
     reauthPrivateKeyName.textContent = t('noFileChosen');
@@ -3558,6 +3778,7 @@
       // Keep the newest half when the buffer overflows; an implicit cap on memory.
       record.logBuffer = record.logBuffer.slice(-Math.floor(LOG_BUFFER_LIMIT / 2));
     }
+    if (record.__diffArm) { clusterArmDiffTimer(record); }
   }
 
   function stripAnsiEscapes(text) {
@@ -3612,6 +3833,7 @@
       if (!path || path[0] !== '/' || path.length > 4096 || path.indexOf('\x00') !== -1) { continue; }
       record.osc7Seen = true;
       if (record.onPrompt) { record.onPrompt(); }
+      if (record.onOsc7) { record.onOsc7(); }
       if (record.currentDirectory !== path) {
         record.currentDirectory = path;
         saveSessions();
@@ -3652,6 +3874,7 @@
 
     term.onData(function (data) {
       if (record.state === 'connected' && sock.readyState === window.WebSocket.OPEN) {
+        if (handleClusterInput(record, data)) { return; }
         sock.send(JSON.stringify({ data: data }));
       }
     });
@@ -3660,6 +3883,7 @@
       if (record.sock !== sock) { return; }
       record.retryConnection = null;
       record.socketRetrying = false;
+      record.connectedAt = Date.now();
       record.body.innerHTML = '';
       term.open(record.body);
       setCardState(record, 'connected', null, 'connected');
@@ -3829,6 +4053,86 @@
   function openLocalTerminal() {
     if (!localTerminalEnabled) { return; }
     var groupId = groupSelect.value || (groups[0] && groups[0].id);
+    window.fetch('local-terminal', { credentials: 'same-origin' })
+      .then(function (response) {
+        return response.ok ? response.json() : { supported: true, shells: [] };
+      })
+      .then(function (info) {
+        var shells = (info && info.shells) || [];
+        if (shells.length) {
+          openLocalTerminalDialog(groupId, shells);
+        } else {
+          requestLocalTerminal(groupId, 'auto');
+        }
+      })
+      .catch(function () {
+        requestLocalTerminal(groupId, 'auto');
+      });
+  }
+
+  function openLocalTerminalDialog(groupId, shells) {
+    if (!closeUploadDialog(false)) { return; }
+    localTerminalPreviousFocus = modalReturnFocus(openLocalTerminalButton);
+    closeReauthentication(false);
+    closeConnectionDialog(false);
+    closeHostManager(false);
+    closeSystemSettings(false);
+    logOverlay.classList.remove('is-open');
+    renderLocalTerminalShells(shells);
+    localTerminalGroupId = groupId;
+    localTerminalOverlay.classList.add('is-open');
+    localTerminalOverlay.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function () {
+      var checked = localTerminalShellList.querySelector('input:checked');
+      if (checked) { checked.focus(); } else { localTerminalOpenShellButton.focus(); }
+    }, 0);
+  }
+
+  function closeLocalTerminalDialog(restoreFocus) {
+    if (!localTerminalOverlay.classList.contains('is-open')) { return; }
+    var active = document.activeElement;
+    if (active && localTerminalOverlay.contains(active)) { active.blur(); }
+    localTerminalOverlay.classList.remove('is-open');
+    localTerminalOverlay.setAttribute('aria-hidden', 'true');
+    if (restoreFocus !== false && localTerminalPreviousFocus && document.contains(localTerminalPreviousFocus)) {
+      localTerminalPreviousFocus.focus();
+    }
+    localTerminalPreviousFocus = null;
+  }
+
+  function localTerminalShellLabel(id) {
+    var key = 'shell' + id.charAt(0).toUpperCase() + id.slice(1);
+    return t(key);
+  }
+
+  function renderLocalTerminalShells(shells) {
+    localTerminalShellList.innerHTML = '';
+    var choices = [{ id: 'auto', label: t('shellAuto') }].concat(shells.map(function (id) {
+      return { id: id, label: localTerminalShellLabel(id) };
+    }));
+    choices.forEach(function (choice, index) {
+      var input = el('input', {
+        type: 'radio', name: 'local-terminal-shell', value: choice.id
+      });
+      if (index === 0) { input.checked = true; }
+      localTerminalShellList.appendChild(el('label', {
+        class: 'local-terminal-shell'
+      }, [input, el('span', { text: choice.label })]));
+    });
+  }
+
+  function submitLocalTerminal() {
+    var checked = localTerminalShellList.querySelector(
+      'input[name="local-terminal-shell"]:checked'
+    );
+    var shell = checked ? checked.value : 'auto';
+    var groupId = localTerminalGroupId || groupSelect.value ||
+      (groups[0] && groups[0].id);
+    closeLocalTerminalDialog(false);
+    requestLocalTerminal(groupId, shell);
+  }
+
+  function requestLocalTerminal(groupId, shell) {
     var record = createCard({
       hostname: 'localhost',
       username: 'local',
@@ -3842,6 +4146,7 @@
     var body = new window.URLSearchParams();
     body.set('_xsrf', xsrfToken());
     body.set('term', 'xterm-256color');
+    if (shell) { body.set('shell', shell); }
     window.fetch('local-terminal', {
       method: 'POST',
       credentials: 'same-origin',
@@ -3860,6 +4165,307 @@
       setCardState(record, 'error', t('localTerminalFailed'));
       toast(t('localTerminalFailed'), 'error');
     });
+  }
+
+  // ---- Cluster broadcast (focus mode) ------------------------------------
+  var clusterPending = '';   // accumulated input line of the hosted terminal
+  var clusterDiff = {};      // groupId -> { mainId, diff: {termId: true} }
+
+  function clusterGroup(record) {
+    if (!record || !isFocusMode() || focusActiveId !== record.id) { return null; }
+    var group = groupById(record.group);
+    return group && group.clusterSend ? group : null;
+  }
+
+  function clusterTargetsOf(group) {
+    var list = broadcastRecipients(group.id).filter(function (item) {
+      return item.state === 'connected' && item.sock &&
+        item.sock.readyState === window.WebSocket.OPEN;
+    });
+    // The typing terminal always executes what it sends, even when the
+    // selected scope does not include it.
+    var main = terminals[focusActiveId];
+    if (group.clusterSend && main && list.indexOf(main) < 0 &&
+        main.state === 'connected' && main.sock &&
+        main.sock.readyState === window.WebSocket.OPEN) {
+      list.push(main);
+    }
+    return list;
+  }
+
+  function clusterResetPending() {
+    if (clusterPending) {
+      clusterPending = '';
+      notifyFocusView();
+    }
+  }
+
+  function setClusterSend(groupId, mode) {
+    var group = groupById(groupId);
+    if (!group) { return; }
+    if (mode === 'off') {
+      group.clusterSend = false;
+    } else {
+      group.clusterSend = true;
+      group.broadcastSelectedOnly = mode === 'selected';
+      refreshGroupBroadcastScope(group.id);
+      refreshBroadcastSelection(group.id);
+    }
+    if (!group.clusterSend) { clusterResetPending(); }
+    saveGroups();
+    notifyFocusView();
+  }
+
+  // Returns true when the default send must be skipped because the engine
+  // already delivered the input to the main terminal and its targets.
+  function handleClusterInput(record, data) {
+    var group = clusterGroup(record);
+    if (!group || !data) { return false; }
+
+    // Multi-line paste: run the group's paced line-by-line machine.
+    if (data.indexOf('\n') >= 0 || data.slice(0, -1).indexOf('\r') >= 0) {
+      return clusterRunScript(record, group, data);
+    }
+
+    var endsWithEnter = data.charAt(data.length - 1) === '\r';
+    var body = endsWithEnter ? data.slice(0, -1) : data;
+
+    if (endsWithEnter) {
+      var line = clusterPending + body;
+      clusterPending = '';
+      // The main terminal receives the Enter through its own keystroke flow;
+      // only the typed line is replicated to the other targets.
+      clusterBroadcastLine(record, group, line);
+      return false;
+    }
+
+    if (body.indexOf('\x1b') >= 0 || body === '\t') {
+      // Completion, history, arrows: the resulting line is unknowable.
+      clusterResetPending();
+      return false;
+    }
+
+    var replicated = { '\x03': true, '\x04': true, '\x1a': true, '\x0c': true, '\x15': true };
+    if (body.length === 1 && replicated[body]) {
+      clusterResetPending();
+      clusterReplicateControl(record, group, body);
+      return false;
+    }
+
+    if (body === '\x7f') {
+      clusterPending = clusterPending.slice(0, -1);
+      notifyFocusView();
+      return false;
+    }
+
+    var printable = true;
+    for (var i = 0; i < body.length; i += 1) {
+      var code = body.charCodeAt(i);
+      if (code < 0x20 || code === 0x7f) { printable = false; break; }
+    }
+    if (printable) {
+      clusterPending += body;
+      if (clusterPending.length > 2000) { clusterPending = clusterPending.slice(-2000); }
+      notifyFocusView();
+      return false;
+    }
+
+    // Unknown control sequence: keep the main terminal working, drop the line.
+    clusterResetPending();
+    return false;
+  }
+
+  function clusterRunScript(record, group, text) {
+    if (lineRun) {
+      if (lineRun.groupId === group.id) {
+        lineRunStop(group.id);
+      } else {
+        toast(t('lineSendBusy', { name: lineRun.name }), 'error');
+        return false;
+      }
+    }
+    clusterResetPending();
+    clusterClearDiff(group.id);
+    var scriptLines = text.trim().split(/\r?\n/);
+    clusterOpenCapture(group, record, scriptLines[scriptLines.length - 1] || '');
+    alignClusterTargets(record, clusterTargetsOf(group).filter(function (item) {
+      return item !== record;
+    }));
+    window.setTimeout(function () {
+      clusterTargetsOf(group).forEach(function (item) {
+        if (item !== record) { clusterArmTargetCapture(group, item); }
+      });
+      if (!lineRunStart(group.id, text)) {
+        // Keep the main terminal working when nothing could be scheduled.
+        sendToRecord(record, text);
+        clusterClearDiff(group.id);
+      }
+      notifyFocusView();
+    }, 120);
+    return true;
+  }
+
+  // Identical commands only produce identical output when every target
+  // shares the main terminal's console geometry; PowerShell tables, for one,
+  // wrap differently per width.
+  function alignClusterTargets(mainRecord, others) {
+    if (!mainRecord || !mainRecord.term) { return; }
+    var cols = mainRecord.term.cols;
+    var rows = mainRecord.term.rows;
+    others.forEach(function (item) {
+      if (!item.term || (item.term.cols === cols && item.term.rows === rows)) { return; }
+      try {
+        item.term.resize(cols, rows);
+        if (item.sock && item.sock.readyState === window.WebSocket.OPEN) {
+          item.sock.send(JSON.stringify({ resize: [cols, rows] }));
+        }
+      } catch (e) { /* noop */ }
+    });
+  }
+
+  function clusterBroadcastLine(record, group, line) {
+    var others = clusterTargetsOf(group).filter(function (item) {
+      return item !== record;
+    });
+    if (!others.length) { return; }
+    var payload = line ? line + '\r' : '\r';
+    alignClusterTargets(record, others);
+    clusterClearDiff(group.id);
+    clusterOpenCapture(group, record, line);
+    // Give resized targets a moment to repaint their prompt, then deliver the
+    // command and arm the screen comparison.
+    window.setTimeout(function () {
+      var delivered = 0;
+      var failed = 0;
+      others.forEach(function (item) {
+        // Targets still settling after connect (banners, first prompt render)
+        // are excluded from the diff verdict for this round. A missing
+        // connectedAt (socket still handshaking) counts as unsettled.
+        var settled = !!item.connectedAt &&
+          Date.now() - item.connectedAt >= 5000;
+        if (settled) { clusterArmTargetCapture(group, item); }
+        try {
+          if (sendToRecord(item, payload)) { delivered += 1; } else { failed += 1; }
+        } catch (e) {
+          failed += 1;
+        }
+      });
+      if (delivered + failed > 0) {
+        var state = clusterDiff[group.id];
+        if (state) { state.fail = failed; }
+        setStatus(t('clusterSyncCount', { count: delivered + 1 }));
+        if (failed) {
+          toast(t('clusterNotDelivered', { count: failed }), 'error');
+        }
+      }
+      if (line) { rememberBroadcastCommand(group.id, line); }
+    }, 120);
+  }
+
+  function clusterReplicateControl(record, group, seq) {
+    clusterTargetsOf(group).forEach(function (item) {
+      if (item !== record) { sendToRecord(item, seq); }
+    });
+  }
+
+  // The verdict for every target is read from its xterm buffer, so it never
+  // depends on whether the terminal is currently hosted in the main panel.
+  function clusterOpenCapture(group, mainRecord, command) {
+    clusterDiff[group.id] = {
+      mainId: mainRecord.id, diff: {}, command: command || '', fail: 0
+    };
+  }
+
+  function clusterArmTargetCapture(group, record) {
+    record.__diffArm = true;
+    record.__diffGroup = group.id;
+    clusterArmDiffTimer(record);
+    record.onOsc7 = function () {
+      // Let xterm flush the triggering chunk into the buffer before reading.
+      window.setTimeout(function () { clusterResolveDiff(group.id, record); }, 30);
+    };
+  }
+
+  // A target is settled once its output has been quiet for a moment; output
+  // activity keeps re-arming the timer so long-running commands resolve late
+  // instead of comparing half-finished output.
+  function clusterArmDiffTimer(record) {
+    if (record.__diffTimer) { window.clearTimeout(record.__diffTimer); }
+    record.__diffTimer = window.setTimeout(function () {
+      clusterResolveDiff(record.__diffGroup, record);
+    }, 900);
+  }
+
+  function clusterResolveDiff(groupId, record) {
+    var state = clusterDiff[groupId];
+    if (!state) { return; }
+    record.__diffArm = false;
+    if (record.__diffTimer) {
+      window.clearTimeout(record.__diffTimer);
+      record.__diffTimer = null;
+    }
+    record.onOsc7 = null;
+    if (record.id === state.mainId || state.diff[record.id] !== undefined) { return; }
+    var main = terminals[state.mainId];
+    if (!main) { return; }
+    state.diff[record.id] = !clusterCaptureMatches(main, record, state.command);
+    notifyFocusView();
+  }
+
+  // The verdict requires THIS command's echo inside the target's recent log:
+  // no echo (still starting up, command not executed, or scrolled away) means
+  // unjudgeable — never compare unrelated startup noise.
+  function clusterCaptureMatches(main, record, commandLine) {
+    var a = clusterTailLines(main, commandLine);
+    var b = clusterTailLines(record, commandLine);
+    if (a === null || b === null) { return null; }
+    if (a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i += 1) {
+      if (a[i] !== b[i]) { return false; }
+    }
+    return true;
+  }
+
+  function clusterTailLines(record, commandLine) {
+    if (!record || !record.logBuffer) { return null; }
+    var text = stripAnsiEscapes(record.logBuffer);
+    var lines = text.split(/\r?\n/).map(function (line) {
+      return line.replace(/\s+$/, '');
+    }).filter(function (line) { return line.length > 0; });
+    lines = lines.slice(-120);
+    // Drop the fresh prompt line: it differs between hosts.
+    if (lines.length) { lines.pop(); }
+    if (!commandLine) { return null; }
+    for (var i = lines.length - 1; i >= 0; i -= 1) {
+      if (lines[i].slice(-commandLine.length) === commandLine) {
+        return lines.slice(i + 1);
+      }
+    }
+    return null;
+  }
+
+  function clusterClearDiff(groupId) {
+    var state = clusterDiff[groupId];
+    if (!state) { return; }
+    Object.keys(terminals).forEach(function (id) {
+      var record = terminals[id];
+      record.__diffArm = false;
+      record.__diffGroup = null;
+      if (record.__diffTimer) {
+        window.clearTimeout(record.__diffTimer);
+        record.__diffTimer = null;
+        record.onOsc7 = null;
+      }
+    });
+    delete clusterDiff[groupId];
+  }
+
+  function clusterStatusFor(group) {
+    if (lineRun && lineRun.groupId === group.id) {
+      return { running: true, index: lineRun.index, total: lineRun.entries.length };
+    }
+    var count = group.clusterSend ? clusterTargetsOf(group).length : 0;
+    return { running: false, count: count };
   }
 
   // ---- Broadcast ---------------------------------------------------------
@@ -4340,6 +4946,7 @@
     closeConnectionDialog(false);
     closeHostManager(false);
     closeSystemSettings(false);
+    closeLocalTerminalDialog(false);
     closeLogSaveDialog(false);
     logOverlay.classList.remove('is-open');
     uploadSelection = {
@@ -4433,11 +5040,16 @@
     });
   }
 
+  function isValidUploadDirectory(path) {
+    if (!path) { return false; }
+    return path[0] === '/' || /^[A-Za-z]:[\\/]/.test(path) || path.indexOf('\\\\') === 0;
+  }
+
   function startFileUploads() {
     if (!uploadSelection || uploadSelection.uploading) { return; }
     var targets = uploadSelection.targets.filter(function (target) { return target.available; });
     var invalid = targets.some(function (target) {
-      return !target.pathInput.value || target.pathInput.value[0] !== '/';
+      return !isValidUploadDirectory(target.pathInput.value);
     });
     if (invalid) {
       toast(t('invalidUploadDirectory'), 'error');
@@ -4485,6 +5097,7 @@
 
   // ---- Card drag (within / across groups) --------------------------------
   function startCardDrag(event, id) {
+    if (isFocusMode()) { return; }
     if (event.button !== undefined && event.button !== 0) { return; }
     if (event.target.closest('button')) { return; }
     if (event.target.closest('[contenteditable="true"]')) { return; }
@@ -4749,6 +5362,10 @@
     refreshBroadcastSelection(groupId);
     updateSummary();
     saveSessions();
+    if (isFocusMode() && focusActiveId === id && window.WSSH_FOCUS) {
+      window.WSSH_FOCUS.reactivate(id);
+    }
+    notifyFocusView();
     fitTerminal(record);
   }
 
@@ -4857,6 +5474,20 @@
       togglePersistentPanels();
       return;
     }
+    if (actionId === 'toggleFocusMode') {
+      setUIMode(isFocusMode() ? 'workspace' : 'focus');
+      return;
+    }
+    if (actionId === 'cycleClusterSend') {
+      if (!isFocusMode() || !focusActiveId) { return; }
+      var clusterRecord = terminals[focusActiveId];
+      var clusterGroupObj = clusterRecord ? groupById(clusterRecord.group) : null;
+      if (!clusterGroupObj) { return; }
+      var clusterNext = !clusterGroupObj.clusterSend ? 'all' :
+        (clusterGroupObj.broadcastSelectedOnly ? 'off' : 'selected');
+      setClusterSend(clusterGroupObj.id, clusterNext);
+      return;
+    }
     if (actionId === 'toggleBroadcastScope') {
       var focusedColumn = document.activeElement && document.activeElement.closest ?
         document.activeElement.closest('.group') : null;
@@ -4894,6 +5525,35 @@
   // ---- Top bar actions ---------------------------------------------------
   $('#add-group').addEventListener('click', function () { addGroup(null, { focus: true }); });
 
+  modeToggleButton.addEventListener('click', function () {
+    setUIMode(isFocusMode() ? 'workspace' : 'focus');
+  });
+  $('#focus-mode-back').addEventListener('click', function () {
+    setUIMode('workspace');
+  });
+  focusInstallAppButton.addEventListener('click', function () {
+    installAppButton.click();
+  });
+  $('#focus-sidebar-toggle').addEventListener('click', function () {
+    focusSidebar.classList.toggle('is-open');
+  });
+  $('#focus-sidebar-close').addEventListener('click', function () {
+    focusSidebar.classList.remove('is-open');
+  });
+  $('#focus-connect').addEventListener('click', openConnectionDialog);
+  $('#focus-hosts').addEventListener('click', openHostManager);
+  $('#focus-system-settings').addEventListener('click', openSystemSettings);
+  $('#focus-log').addEventListener('click', openLogOverlay);
+  $('#focus-new-group').addEventListener('click', function () { addGroup(null); });
+  $('#focus-theme').addEventListener('click', function () { themeToggle.click(); });
+  $('#focus-language').addEventListener('click', function () { languageToggle.click(); });
+  $('#focus-disconnect-all').addEventListener('click', disconnectAllTerminals);
+  if (localTerminalEnabled) {
+    $('#focus-local-terminal').addEventListener('click', openLocalTerminal);
+  } else {
+    $('#focus-local-terminal').style.display = 'none';
+  }
+
   refreshSshConfig.addEventListener('click', loadSshConfigHosts);
   selectAllSshConfig.addEventListener('change', function () {
     selectedSshConfigHosts = Object.create(null);
@@ -4927,6 +5587,12 @@
   closeHostManagerButton.addEventListener('click', function () { closeHostManager(); });
   hostManagerOverlay.addEventListener('click', function (event) {
     if (event.target === hostManagerOverlay) { closeHostManager(); }
+  });
+  closeLocalTerminalButton.addEventListener('click', function () { closeLocalTerminalDialog(); });
+  cancelLocalTerminalButton.addEventListener('click', function () { closeLocalTerminalDialog(); });
+  localTerminalOpenShellButton.addEventListener('click', submitLocalTerminal);
+  localTerminalOverlay.addEventListener('click', function (event) {
+    if (event.target === localTerminalOverlay) { closeLocalTerminalDialog(); }
   });
   groupSelect.addEventListener('change', function () {
     hostManagerGroupId = groupSelect.value;
@@ -5021,14 +5687,16 @@
     sshConfigHostInput.value = '';
   });
 
-  $('#disconnect-all').addEventListener('click', function () {
+  function disconnectAllTerminals() {
     var ids = Object.keys(terminals);
     if (!ids.length) { toast(t('noDisconnect')); return; }
     if (settings.confirmDisconnect && !window.confirm(t('confirmDisconnectMessage'))) { return; }
     ids.forEach(function (id) { closeTerminal(id, t('closed')); });
     setStatus(t('allDisconnected'));
     toast(t('allDisconnected'));
-  });
+  }
+
+  $('#disconnect-all').addEventListener('click', disconnectAllTerminals);
 
   [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput, connectionConcurrencyInput].forEach(function (input) {
     input.addEventListener('change', updateSettingsFromControls);
@@ -5141,6 +5809,10 @@
       trapModalFocus(fileUploadOverlay, event);
       return;
     }
+    if (event.key === 'Tab' && localTerminalOverlay.classList.contains('is-open')) {
+      trapModalFocus(localTerminalOverlay, event);
+      return;
+    }
     if (event.key === 'Escape') {
       if (connectionOverlay.classList.contains('is-open')) {
         closeConnectionDialog();
@@ -5170,6 +5842,10 @@
         logOverlay.classList.remove('is-open');
         return;
       }
+      if (localTerminalOverlay.classList.contains('is-open')) {
+        closeLocalTerminalDialog();
+        return;
+      }
       if (focusedGroupId) {
         exitGroupFullscreen();
         return;
@@ -5192,6 +5868,120 @@
     }
   };
 
+  // Minimal surface for the focus-mode view layer (focus-view.js).
+  window.WSSH_CORE = {
+    t: t,
+    el: el,
+    ICONS: ICONS,
+    getGroups: function () { return groups; },
+    getTerminals: function () { return terminals; },
+    isFocusMode: isFocusMode,
+    groupById: groupById,
+    listEl: listEl,
+    groupColorValue: groupColorValue,
+    getActiveTerminalId: function () { return focusActiveId; },
+    setActiveTerminalId: function (id) {
+      if ((id || null) !== focusActiveId) { clusterPending = ''; }
+      focusActiveId = id || null;
+    },
+    closeTerminal: function (id) { closeTerminal(id, t('userClosed')); },
+    fitTerminal: fitTerminal,
+    saveSessions: saveSessions,
+    saveGroups: saveGroups,
+    logAction: logAction,
+    toast: toast,
+    setStatus: setStatus,
+    sendToRecord: sendToRecord,
+    controlSequence: controlSequence,
+    broadcastRecipients: broadcastRecipients,
+    rememberBroadcastCommand: rememberBroadcastCommand,
+    getBroadcastHistory: function (groupId) {
+      return (broadcastHistory[groupId] || []).slice();
+    }
+  };
+
+  // Cluster-broadcast surface for the focus view (focus-view.js).
+  window.WSSH_CLUSTER = {
+    getState: function (groupId) {
+      var group = groupById(groupId);
+      return {
+        on: !!(group && group.clusterSend),
+        selectedOnly: !!(group && group.broadcastSelectedOnly)
+      };
+    },
+    setState: function (groupId, mode) { setClusterSend(groupId, mode); },
+    getStatus: function (groupId) {
+      var group = groupById(groupId);
+      if (!group) { return { on: false, pending: '', hasGroup: false }; }
+      var info = clusterStatusFor(group);
+      var state = clusterDiff[groupId];
+      return {
+        hasGroup: true,
+        on: !!group.clusterSend,
+        selectedOnly: !!group.broadcastSelectedOnly,
+        count: info.count || 0,
+        running: !!info.running,
+        index: info.index || 0,
+        total: info.total || 0,
+        pending: clusterPending,
+        fail: (state && state.fail) || 0
+      };
+    },
+    stopRun: function (groupId) {
+      if (lineRun && lineRun.groupId === groupId) { lineRunStop(groupId); }
+    },
+    getDiff: function (groupId) {
+      var state = clusterDiff[groupId];
+      if (!state) { return []; }
+      return Object.keys(state.diff).filter(function (id) { return state.diff[id]; });
+    },
+    clearDiff: function (groupId) {
+      clusterClearDiff(groupId);
+      notifyFocusView();
+    },
+    toggleGroupPin: function (groupId) {
+      var group = groupById(groupId);
+      if (group) {
+        toggleGroupPinned(group);
+        notifyFocusView();
+      }
+    },
+    reconnectFailed: function (groupId) {
+      var group = groupById(groupId);
+      if (group) { reconnectFailedGroup(group); }
+    },
+    debugScreens: function () {
+      var record = terminals[focusActiveId];
+      var grp = record ? groupById(record.group) : null;
+      if (!grp) { return { error: 'no active terminal' }; }
+      var state = clusterDiff[grp.id] || { mainId: record.id, diff: {}, command: '' };
+      var main = terminals[state.mainId];
+      var rows = {
+        command: state.command,
+        mainId: state.mainId,
+        diff: Object.keys(state.diff).filter(function (id) { return state.diff[id]; }),
+        main: main ? clusterTailLines(main, state.command) : null
+      };
+      rows.targets = Object.keys(terminals)
+        .filter(function (id) { return id !== state.mainId; })
+        .map(function (id) {
+          return { id: id, lines: clusterTailLines(terminals[id], state.command) };
+        });
+      return rows;
+    },
+    isClusterTarget: function (record) {
+      if (!record || !isFocusMode()) { return false; }
+      var group = groupById(record.group);
+      if (!group || !group.clusterSend) { return false; }
+      if (terminals[focusActiveId] === record) { return true; }
+      return broadcastRecipients(group.id).indexOf(record) >= 0;
+    },
+    feed: function (record, text) {
+      // Behaves exactly like typing the text into the hosted terminal.
+      if (!handleClusterInput(record, text)) { sendToRecord(record, text); }
+    }
+  };
+
   // ---- Bootstrap ---------------------------------------------------------
   registerServiceWorker();
   applyLanguage();
@@ -5211,5 +6001,6 @@
     setStatus(t('readyDetail'));
   }
   loadSshConfigHosts();
+  applyUIModeIfNeeded();
   restoreSessions();
 })();

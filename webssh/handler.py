@@ -3,6 +3,7 @@ import getpass
 import json
 import logging
 import os
+import shutil
 import socket
 import struct
 import subprocess
@@ -17,6 +18,14 @@ import tornado.web
 
 if sys.platform != 'win32':
     import pty
+    LOCAL_TERMINAL_SUPPORTED = True
+else:
+    try:
+        from winpty.ptyprocess import PtyProcess
+        LOCAL_TERMINAL_SUPPORTED = True
+    except ImportError:
+        PtyProcess = None
+        LOCAL_TERMINAL_SUPPORTED = False
 
 from concurrent.futures import ThreadPoolExecutor
 from tornado.ioloop import IOLoop
@@ -28,7 +37,8 @@ from webssh.utils import (
     is_valid_encoding
 )
 from webssh.worker import (
-    Worker, PTYChannel, LocalProcess, register_worker, clients
+    Worker, PTYChannel, LocalProcess, WindowsPTYChannel, WindowsLocalProcess,
+    register_worker, clients
 )
 from webssh.settings import (
     DEFAULT_CONNECT_WORKERS, MAX_CONNECT_WORKERS, MIN_CONNECT_WORKERS,
@@ -49,6 +59,36 @@ except ImportError:
 DEFAULT_PORT = 22
 HOST_PATTERN_CHARS = set('*?!')
 BATCH_WORKER_GRACE = 30
+
+
+def windows_shell_command(name):
+    name = (name or '').strip().lower()
+    if name == 'cmd':
+        comspec = os.environ.get('ComSpec') or shutil.which('cmd')
+        if not comspec or not os.path.isfile(comspec):
+            return None
+        return [comspec, '/k', 'chcp', '65001', '>nul']
+    if name in ('powershell', 'pwsh'):
+        exe = shutil.which(name)
+        if name == 'powershell' and not exe:
+            root = os.environ.get('SystemRoot', r'C:\Windows')
+            candidate = os.path.join(
+                root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+            )
+            if os.path.isfile(candidate):
+                exe = candidate
+        if not exe or not os.path.isfile(exe):
+            return None
+        return [exe, '-NoLogo', '-NoExit', '-Command', 'chcp 65001 | Out-Null']
+    return None
+
+
+def windows_available_shells():
+    available = []
+    for name in ('pwsh', 'powershell', 'cmd'):
+        if windows_shell_command(name):
+            available.append(name)
+    return available
 
 swallow_http_errors = True
 redirecting = None
@@ -468,14 +508,25 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
         super(LocalTerminalHandler, self).initialize(loop)
         self.result = dict(id=None, status=None, encoding='utf-8')
 
-    def post(self):
+    def get(self):
         if sys.platform == 'win32':
+            shells = windows_available_shells()
+        else:
+            shells = []
+        self.write({'supported': LOCAL_TERMINAL_SUPPORTED, 'shells': shells})
+
+    def post(self):
+        if not LOCAL_TERMINAL_SUPPORTED:
             raise tornado.web.HTTPError(
                 400, 'Local terminal is not supported on this platform.'
             )
         ip, port = self.get_client_addr()
         if len(clients.get(ip, {})) >= options.maxconn:
             raise tornado.web.HTTPError(403, 'Too many live connections.')
+
+        if sys.platform == 'win32':
+            self.spawn_windows_local_terminal(ip, port)
+            return
 
         master, slave = pty.openpty()
         shell = os.environ.get('SHELL') or '/bin/sh'
@@ -491,6 +542,32 @@ class LocalTerminalHandler(MixinHandler, tornado.web.RequestHandler):
             ('localhost', 0)
         )
         worker.enable_directory_tracking(os.path.basename(shell))
+        worker.encoding = 'utf-8'
+        register_worker(worker, clients, (ip, port))
+        worker.schedule_recycle(options.delay)
+        self.result.update(id=worker.id)
+        self.write(self.result)
+
+    def spawn_windows_local_terminal(self, ip, port):
+        shell = self.get_argument('shell', 'auto').strip().lower()
+        available = windows_available_shells()
+        if shell == 'auto':
+            shell = available[0] if available else None
+        elif shell not in available:
+            shell = None
+        if not shell:
+            raise tornado.web.HTTPError(
+                400, 'No supported shell is available on this platform.'
+            )
+        command = windows_shell_command(shell)
+        cwd = os.getcwd()
+        pty_process = PtyProcess.spawn(
+            subprocess.list2cmdline(command), cwd=cwd, dimensions=(24, 80)
+        )
+        worker = Worker(
+            self.loop, WindowsLocalProcess(pty_process, cwd),
+            WindowsPTYChannel(pty_process), ('localhost', 0)
+        )
         worker.encoding = 'utf-8'
         register_worker(worker, clients, (ip, port))
         worker.schedule_recycle(options.delay)
@@ -772,7 +849,7 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
 
     def get(self):
         self.render('index.html', debug=self.debug, font=self.font,
-                    local_terminal=sys.platform != 'win32')
+                    local_terminal=LOCAL_TERMINAL_SUPPORTED)
 
     @tornado.gen.coroutine
     def post(self):

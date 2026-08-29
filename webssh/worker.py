@@ -1,8 +1,11 @@
 import logging
 import os
 import posixpath
+import re
 import shutil
 import signal
+import socket
+import threading
 try:
     import secrets
 except ImportError:
@@ -38,6 +41,7 @@ SHELL_DIRECTORY_COMMANDS = {
     )
 }
 SHELL_DIRECTORY_READY = b'\x1b]1337;TermFleetShellReady\x07'
+WINDOWS_ABSOLUTE_PATH = re.compile(r'^(?:[A-Za-z]:[\\/]|\\\\)')
 
 
 def register_worker(worker, clients, src_addr):
@@ -201,10 +205,10 @@ class Worker(object):
         if self.closed:
             raise ValueError('Worker is closed.')
         directory = directory or self.get_upload_directory()
-        if not directory.startswith('/'):
-            raise ValueError('Upload directory must be an absolute path.')
 
         if isinstance(self.ssh, LocalProcess):
+            if not (directory.startswith('/') or WINDOWS_ABSOLUTE_PATH.match(directory)):
+                raise ValueError('Upload directory must be an absolute path.')
             if not os.path.isdir(directory):
                 raise ValueError('Upload directory does not exist.')
             destination = os.path.join(directory, filename)
@@ -213,6 +217,8 @@ class Worker(object):
             shutil.copyfile(local_path, destination)
             return destination
 
+        if not directory.startswith('/'):
+            raise ValueError('Upload directory must be an absolute path.')
         sftp = self.ssh.open_sftp()
         try:
             destination = posixpath.join(directory, filename)
@@ -329,6 +335,91 @@ class LocalProcess(object):
         if self.proc.poll() is None:
             try:
                 os.killpg(os.getpgid(self.proc.pid), signal.SIGHUP)
+            except OSError:
+                pass
+
+
+class WindowsLocalProcess(LocalProcess):
+    def close(self):
+        try:
+            if self.proc.isalive():
+                self.proc.terminate(force=True)
+        except Exception:
+            logging.debug(
+                'Error while terminating the Windows local process',
+                exc_info=True
+            )
+
+
+class WindowsPTYChannel(object):
+    """Bridge a pywinpty ConPTY process into the IOLoop through a socketpair.
+
+    ConPTY output arrives on pipe handles that the IOLoop cannot watch on
+    Windows, so a daemon thread pumps it into one end of a socketpair while
+    the Worker treats the other end like the POSIX PTY master fd.
+    """
+
+    closed = False
+
+    def __init__(self, pty_process):
+        self.pty = pty_process
+        self.closed = False
+        self.read_sock, self.pump_sock = socket.socketpair()
+        self.reader = threading.Thread(target=self.pump_output, daemon=True)
+        self.reader.start()
+
+    def pump_output(self):
+        try:
+            while not self.closed:
+                # pywinpty read() blocks and returns UTF-8 str; EOFError on close.
+                data = self.pty.read(4096)
+                if not data:
+                    continue
+                self.pump_sock.sendall(data.encode('utf-8'))
+        except (EOFError, OSError, ValueError):
+            pass
+        finally:
+            try:
+                self.pump_sock.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    def fileno(self):
+        return self.read_sock.fileno()
+
+    def recv(self, size):
+        try:
+            return self.read_sock.recv(size)
+        except OSError:
+            self.closed = True
+            raise
+
+    def send(self, data):
+        if isinstance(data, (bytes, bytearray)):
+            data = bytes(data).decode('utf-8', 'replace')
+        try:
+            self.pty.write(data)
+        except EOFError:
+            self.closed = True
+            raise OSError('pty closed')
+        except OSError:
+            self.closed = True
+            raise
+        return len(data)
+
+    def resize_pty(self, cols, rows):
+        try:
+            self.pty.setwinsize(int(rows), int(cols))
+        except Exception:
+            logging.debug('Windows PTY resize failed', exc_info=True)
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        for sock in (self.read_sock, self.pump_sock):
+            try:
+                sock.close()
             except OSError:
                 pass
 

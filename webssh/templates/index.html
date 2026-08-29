@@ -2517,6 +2517,667 @@
         backdrop-filter: blur(2px);
       }
 
+      /* ---------- Focus mode ---------- */
+      .app-shell .body {
+        transition: opacity 0.18s ease, transform 0.18s ease;
+      }
+
+      .app-shell.mode-fade .body {
+        opacity: 0;
+        transform: translateY(8px) scale(0.996);
+        pointer-events: none;
+      }
+
+      .focus-shell {
+        display: none;
+      }
+
+      .app-shell.focus-mode .focus-shell {
+        flex: 1;
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        gap: 14px;
+      }
+
+      .app-shell.focus-mode .board-wrap,
+      .app-shell.focus-mode .sidebar {
+        display: none;
+      }
+
+      html:not(.window-controls-overlay-active) .app-shell.focus-mode .topbar {
+        display: none;
+      }
+
+      .focus-brand-panel .focus-brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .focus-brand-panel .focus-brand-row + .focus-brand-row {
+        margin-top: 8px;
+      }
+
+      .focus-brand-name {
+        font-size: 14px;
+        color: var(--ink);
+        letter-spacing: 0.01em;
+      }
+
+      .focus-brand-meta .focus-summary {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        color: var(--faint);
+      }
+
+      .cluster-send-widget {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--segment-line);
+        border-radius: var(--radius-sm);
+        background: var(--segment-bg);
+      }
+
+      .cluster-send-widget .cluster-send-option {
+        padding: 6px 4px;
+        font-size: 13px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--segment-ink);
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .cluster-send-widget .cluster-send-option.is-active {
+        background: var(--segment-active-bg);
+        color: var(--segment-active-ink);
+        box-shadow: var(--segment-shadow);
+      }
+
+      .cluster-send-widget .cluster-send-option:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
+      }
+
+      .cluster-send-widget.is-disabled {
+        opacity: 0.55;
+        pointer-events: none;
+      }
+
+      .cluster-status {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--ink-soft);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 18px;
+      }
+
+      .cluster-status .cluster-status-warn {
+        color: var(--warn);
+        font-weight: 600;
+      }
+
+      .cluster-status .cluster-stop-btn {
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+
+      .cluster-pending {
+        margin-top: 8px;
+        padding: 6px 10px;
+        border: 1px dashed var(--primary-hover-line);
+        border-radius: 8px;
+        background: var(--primary-tint);
+        color: var(--ink-soft);
+        font-family: var(--mono);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .focus-tab-dot[data-sync="on"] {
+        background: var(--primary);
+        box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.18);
+      }
+
+      .focus-group-chip .focus-chip-pin {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        flex: none;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: inherit;
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 0;
+      }
+
+      .focus-group-chip .focus-chip-pin:hover {
+        opacity: 1;
+        background: var(--segment-hover-bg);
+      }
+
+      .focus-group-chip .focus-chip-pin.is-active {
+        color: var(--primary);
+        opacity: 1;
+      }
+
+      .focus-sidebar {
+        position: relative;
+        flex: 0 0 320px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--group-bg);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        z-index: 1;
+      }
+
+      .focus-sidebar-head {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px 6px;
+      }
+
+      .focus-sidebar-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .focus-sidebar-scroll {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        overflow-y: auto;
+      }
+
+      .focus-panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-soft);
+        padding: 12px 14px;
+      }
+
+      .focus-panel-title {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .focus-panel-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .focus-panel-title-row .focus-panel-title {
+        margin-bottom: 10px;
+      }
+
+      .focus-panel-title-row .focus-reconnect-failed {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        min-height: 0;
+        padding: 0;
+        margin-bottom: 6px;
+        border-radius: 7px;
+      }
+
+      .focus-panel-title-row .focus-reconnect-failed:hover {
+        border-color: var(--primary-hover-line);
+        background: var(--primary-tint);
+        color: var(--primary);
+      }
+
+      .focus-panel-hint {
+        margin: -4px 0 8px;
+        font-size: 12px;
+        color: var(--faint);
+      }
+
+      .focus-panel-body {
+        min-width: 0;
+      }
+
+      .focus-panel-grow {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .focus-panel-grow .focus-panel-body {
+        flex: 1;
+        min-height: 80px;
+        overflow-y: auto;
+      }
+
+      .focus-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .focus-action {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 34px;
+        padding: 0 11px;
+        font-size: 13px;
+        white-space: nowrap;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--segment-active-bg);
+        color: var(--ink-soft);
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+      }
+
+      .focus-action svg {
+        flex: none;
+        opacity: 0.75;
+      }
+
+      .focus-action span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .focus-action:hover {
+        border-color: var(--primary-hover-line);
+        background: var(--primary-tint);
+        color: var(--ink);
+      }
+
+      .focus-action:hover svg {
+        opacity: 1;
+        color: var(--primary);
+      }
+
+      .focus-action:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+
+      .focus-action.is-danger {
+        color: var(--danger);
+        border-color: var(--danger-line);
+      }
+
+      .focus-action.is-danger:hover {
+        background: var(--danger-tint);
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+
+      .focus-action.is-danger:hover svg {
+        color: var(--danger);
+      }
+
+      .focus-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .focus-history-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 7px 10px;
+        border: 1px solid var(--segment-line);
+        border-radius: 8px;
+        background: var(--segment-hover-bg);
+        color: var(--ink-soft);
+        font-family: var(--mono);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      }
+
+      .focus-history-item:hover {
+        background: var(--segment-active-bg);
+        border-color: var(--primary-hover-line);
+        color: var(--ink);
+      }
+
+      .focus-history-item:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+
+      .focus-history-command {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .focus-history-empty {
+        font-size: 12px;
+        color: var(--faint);
+        padding: 4px 2px;
+      }
+
+      .focus-stage {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .focus-tabs-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 40px;
+      }
+
+      .focus-sidebar-toggle {
+        display: none;
+        flex: none;
+      }
+
+      .focus-tabs {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+        overflow-x: auto;
+        padding: 2px 2px 0;
+        scrollbar-width: thin;
+      }
+
+      .focus-tab-group {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        flex: none;
+        max-width: 100%;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--group-color, var(--line));
+      }
+
+      .focus-group-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+        align-self: center;
+        max-width: 150px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: var(--segment-bg);
+        border: 1px solid var(--segment-line);
+        color: var(--ink-soft);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .focus-group-chip .group-color-dot {
+        background: var(--group-color, var(--faint));
+      }
+
+      .focus-group-chip span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .focus-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        flex: none;
+        max-width: 200px;
+        padding: 7px 10px;
+        border: 1px solid var(--segment-line);
+        border-bottom: none;
+        border-radius: 9px 9px 0 0;
+        background: var(--segment-bg);
+        color: var(--segment-ink);
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .focus-tab:hover {
+        background: var(--segment-hover-bg);
+        color: var(--segment-hover-ink);
+      }
+
+      .focus-tab:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
+      }
+
+      .focus-tab.is-active {
+        background: var(--panel-solid);
+        color: var(--ink);
+        box-shadow: 0 -1px 4px rgba(15, 23, 42, 0.06);
+      }
+
+      .focus-tab.is-broadcast-selected {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+
+      .focus-tab.is-broadcast-selected .focus-tab-dot[data-state="connected"] {
+        background: var(--accent);
+      }
+
+      .focus-tab span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .focus-tab-dot,
+      .group-color-dot {
+        flex: none;
+        display: inline-block;
+        vertical-align: middle;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--faint);
+      }
+
+      .group-title .group-color-dot {
+        margin-right: 6px;
+      }
+
+      .focus-tab-dot[data-state="connected"] { background: #22c55e; }
+      .focus-tab-dot[data-state="connecting"] { background: var(--faint); }
+      .focus-tab-dot[data-state="error"] { background: #ef4444; }
+      .focus-tab-dot[data-forecast="warn"] { background: var(--warn); box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35); }
+
+      .focus-tab-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        flex: none;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: inherit;
+        opacity: 0.55;
+        cursor: pointer;
+        padding: 0;
+      }
+
+      .focus-tab-close:hover {
+        opacity: 1;
+        background: var(--danger-tint);
+        color: var(--danger);
+      }
+
+      .focus-tab-close svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .focus-main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--radius);
+      }
+
+      .focus-main .terminal-card {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+        margin: 0;
+      }
+
+      .focus-main .terminal-body {
+        height: auto !important;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .focus-main .resize-handle {
+        display: none;
+      }
+
+      .focus-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: 1px dashed var(--line-strong);
+        border-radius: var(--radius);
+        background: var(--empty-bg);
+        color: var(--faint);
+        text-align: center;
+        padding: 24px;
+      }
+
+      .focus-empty strong {
+        color: var(--ink-soft);
+        font-size: 15px;
+      }
+
+      .focus-empty span {
+        font-size: 13px;
+      }
+
+      /* ---------- Local terminal dialog ---------- */
+      .local-terminal-overlay {
+        z-index: 58;
+      }
+
+      .local-terminal-dialog {
+        width: min(420px, 100%);
+      }
+
+      .local-terminal-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px 16px 16px;
+      }
+
+      .local-terminal-hint {
+        margin: 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .local-terminal-shell span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .local-terminal-shell input {
+        flex: none;
+      }
+
+      .local-terminal-shells {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .local-terminal-shell {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--segment-line);
+        border-radius: var(--radius-sm);
+        background: var(--segment-hover-bg);
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--ink-soft);
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+
+      .local-terminal-shell:hover {
+        background: var(--selected-bg);
+        border-color: var(--selected-line);
+      }
+
+      .local-terminal-shell:has(input:checked) {
+        border-color: var(--primary);
+        background: var(--primary-tint);
+        color: var(--ink);
+      }
+
+      .local-terminal-shell input {
+        accent-color: var(--primary);
+      }
+
+      .local-terminal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
       /* ---------- Toast ---------- */
       .toast-stack {
         position: fixed;
@@ -2741,6 +3402,31 @@
         .app-shell.group-fullscreen .group.is-focused .terminal-list {
           grid-template-columns: minmax(0, 1fr);
         }
+
+        .app-shell.focus-mode .focus-sidebar {
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 40;
+          width: min(340px, calc(100vw - 20px));
+          border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+          box-shadow: var(--shadow-lg);
+          transform: translateX(-105%);
+          transition: transform 0.2s ease;
+        }
+
+        .app-shell.focus-mode .focus-sidebar.is-open {
+          transform: translateX(0);
+        }
+
+        .app-shell.focus-mode .focus-sidebar-head {
+          display: flex;
+        }
+
+        .app-shell.focus-mode .focus-sidebar-toggle {
+          display: inline-flex;
+        }
       }
 
       @media (max-width: 640px) {
@@ -2758,6 +3444,14 @@
         .app-shell.panels-pinned .sidebar-panel {
           width: 100%;
           min-width: 0;
+        }
+
+        .app-shell.focus-mode .focus-sidebar {
+          width: min(340px, 92vw);
+        }
+
+        .app-shell.focus-mode .focus-tab {
+          max-width: 150px;
         }
       }
 
@@ -2886,6 +3580,7 @@
 
         .topbar-panel #open-host-manager,
         .topbar-panel #open-system-settings,
+        .topbar-panel #mode-toggle,
         .topbar-panel #add-group,
         .topbar-panel #disconnect-all {
           width: 30px;
@@ -2894,6 +3589,7 @@
 
         .topbar-panel #open-host-manager span,
         .topbar-panel #open-system-settings span,
+        .topbar-panel #mode-toggle span,
         .topbar-panel #add-group span,
         .topbar-panel #disconnect-all span {
           display: none;
@@ -2989,6 +3685,13 @@
             <button class="btn btn-compact" type="button" id="open-log" data-i18n="operationLog" data-i18n-title="operationLog" data-i18n-aria-label="operationLog">日志</button>
             <button class="btn" type="button" id="open-local-terminal">
               <span data-i18n="localTerminal">本机终端</span>
+            </button>
+            <button class="btn" type="button" id="mode-toggle" aria-pressed="false" data-i18n-title="toggleFocusMode" data-i18n-aria-label="toggleFocusMode" title="切换聚焦模式" aria-label="切换聚焦模式">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M3 9h18M9 20V9" stroke="currentColor" stroke-width="2"/>
+              </svg>
+              <span id="mode-toggle-label" data-i18n="modeFocus">聚焦模式</span>
             </button>
             <button class="btn" type="button" id="add-group">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -3092,6 +3795,103 @@
         <div class="board-wrap">
           <section class="board" id="board" aria-label="服务器分组" data-i18n-aria-label="serverGroups"></section>
         </div>
+
+        <section class="focus-shell" id="focus-shell" hidden aria-label="聚焦模式" data-i18n-aria-label="focusMode">
+          <aside class="focus-sidebar" id="focus-sidebar" aria-label="聚焦侧栏" data-i18n-aria-label="focusSidebar">
+            <div class="focus-sidebar-head">
+              <span class="focus-sidebar-title" data-i18n="focusSidebar">侧栏</span>
+              <button class="btn btn-icon focus-sidebar-close" type="button" id="focus-sidebar-close" data-i18n-title="focusCloseSidebar" data-i18n-aria-label="focusCloseSidebar" title="收起侧栏" aria-label="收起侧栏">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="focus-sidebar-scroll">
+              <section class="focus-panel focus-brand-panel" id="focus-brand-panel">
+                <div class="focus-brand-row">
+                  <strong class="focus-brand-name">TermFleet-SSH</strong>
+                  <button class="btn btn-primary btn-sm" type="button" id="focus-mode-back" data-i18n="modeWorkspace" data-i18n-title="toggleFocusMode" data-i18n-aria-label="modeWorkspace" title="切换到工作台模式" aria-label="工作台模式">工作台模式</button>
+                </div>
+                <div class="focus-brand-row focus-brand-meta">
+                  <span class="focus-summary" id="focus-summary"></span>
+                  <button class="btn btn-sm hide" type="button" id="focus-install-app" data-i18n="installApp" data-i18n-title="installApp" data-i18n-aria-label="installApp" title="安装应用" aria-label="安装应用">安装应用</button>
+                </div>
+              </section>
+              <section class="focus-panel" id="focus-cluster-panel">
+                <div class="focus-panel-title-row">
+                  <h2 class="focus-panel-title" data-i18n="clusterPanelTitle">同步广播</h2>
+                  <button class="btn btn-icon focus-reconnect-failed" type="button" id="focus-reconnect-failed" data-i18n-title="reconnectFailedGroup" data-i18n-aria-label="reconnectFailedGroup" title="重连失败终端" aria-label="重连失败终端">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M20 6v5h-5M4 18v-5h5M18.5 10A7 7 0 0 0 6.1 7.1L4 9M5.5 14a7 7 0 0 0 12.4 2.9L20 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+                <div class="cluster-send-widget" id="cluster-send-widget" role="group" aria-label="同步广播" data-i18n-aria-label="clusterPanelTitle">
+                  <button class="broadcast-scope-option cluster-send-option is-active" type="button" data-cluster="off" data-i18n="clusterOff">关</button>
+                  <button class="broadcast-scope-option cluster-send-option" type="button" data-cluster="all" data-i18n="broadcastScopeAll">全部</button>
+                  <button class="broadcast-scope-option cluster-send-option" type="button" data-cluster="selected" data-i18n="broadcastScopeSelected">已选</button>
+                </div>
+                <div class="cluster-status" id="cluster-status"></div>
+                <div class="cluster-pending" id="cluster-pending" hidden></div>
+              </section>
+              <section class="focus-panel" id="focus-actions-panel">
+                <h2 class="focus-panel-title" data-i18n="focusActionsTitle">快捷操作</h2>
+                <div class="focus-actions" id="focus-actions">
+                  <button class="btn focus-action" type="button" id="focus-connect" data-i18n-title="connectServer" data-i18n-aria-label="connectServer" title="连接服务器" aria-label="连接服务器">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-6 14-2-5-6-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                    <span data-i18n="connectServer">连接服务器</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-hosts" data-i18n-title="hostManager" data-i18n-aria-label="hostManager" title="主机管理" aria-label="主机管理">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><rect x="4" y="14" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span data-i18n="hostManager">主机管理</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-system-settings" data-i18n-title="systemSettings" data-i18n-aria-label="systemSettings" title="系统设置" aria-label="系统设置">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h7M15 7h5M11 4v6M4 17h4M12 17h8M8 14v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span data-i18n="systemSettings">系统设置</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-log" data-i18n-title="operationLog" data-i18n-aria-label="operationLog" title="操作日志" aria-label="操作日志">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span data-i18n="operationLog">日志</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-local-terminal" data-i18n-title="localTerminal" data-i18n-aria-label="localTerminal" title="本机终端" aria-label="本机终端">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span data-i18n="localTerminal">本机终端</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-new-group" data-i18n-title="newGroup" data-i18n-aria-label="newGroup" title="新建分组" aria-label="新建分组">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span data-i18n="newGroup">新建分组</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-theme" data-i18n-title="sidebarTheme" data-i18n-aria-label="sidebarTheme" title="主题" aria-label="主题">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span data-i18n="sidebarTheme">主题</span>
+                  </button>
+                  <button class="btn focus-action" type="button" id="focus-language" data-i18n="languageButton" data-i18n-title="sidebarLanguage" data-i18n-aria-label="sidebarLanguage" title="语言" aria-label="语言">EN</button>
+                  <button class="btn focus-action is-danger" type="button" id="focus-disconnect-all" data-i18n-title="disconnectAll" data-i18n-aria-label="disconnectAll" title="全部断开" aria-label="全部断开">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span data-i18n="disconnectAll">全部断开</span>
+                  </button>
+                </div>
+              </section>
+              <section class="focus-panel focus-panel-grow" id="focus-history-panel">
+                <h2 class="focus-panel-title" id="focus-history-title" data-i18n="broadcastHistory">广播历史</h2>
+                <p class="focus-panel-hint" data-i18n="focusHistoryHint">点击回填到主终端，不自动执行。</p>
+                <div class="focus-panel-body" id="focus-history"></div>
+              </section>
+            </div>
+          </aside>
+          <div class="focus-stage">
+            <div class="focus-tabs-bar">
+              <button class="btn btn-icon focus-sidebar-toggle" type="button" id="focus-sidebar-toggle" data-i18n-title="focusSidebarToggle" data-i18n-aria-label="focusSidebarToggle" title="侧栏" aria-label="侧栏">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <path d="M9.5 4v16" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+              <div class="focus-tabs" id="focus-tabs"></div>
+            </div>
+            <div class="focus-main" id="focus-main"></div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -3333,11 +4133,33 @@
       <pre class="log-output" id="log-output"></pre>
     </div>
 
-    <script src="static/js/xterm.min.js"></script>
-    <script src="static/js/xterm-addon-fit.min.js"></script>
+    <div class="settings-overlay local-terminal-overlay" id="local-terminal-overlay" aria-labelledby="local-terminal-title" aria-modal="true" aria-hidden="true" role="dialog">
+      <section class="settings-dialog local-terminal-dialog">
+        <header class="settings-head">
+          <h2 id="local-terminal-title" data-i18n="localTerminal">本机终端</h2>
+          <button class="btn btn-icon" type="button" id="close-local-terminal" data-i18n-title="close" data-i18n-aria-label="close" title="关闭" aria-label="关闭">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <div class="settings-body local-terminal-body">
+          <p class="local-terminal-hint" data-i18n="localTerminalHint">选择要打开的 shell。</p>
+          <div class="local-terminal-shells" id="local-terminal-shells" role="radiogroup" aria-label="Shell" data-i18n-aria-label="shellGroupLabel"></div>
+          <div class="local-terminal-actions">
+            <button class="btn" type="button" id="cancel-local-terminal" data-i18n="cancel">取消</button>
+            <button class="btn btn-primary" type="button" id="open-local-terminal-shell" data-i18n="localTerminalOpen">打开</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="{{ static_url('js/xterm.min.js') }}"></script>
+    <script src="{{ static_url('js/xterm-addon-fit.min.js') }}"></script>
+    <script src="{{ static_url('js/focus-view.js') }}"></script>
     <script>
       window.WSSH_LOCAL_TERMINAL = {{ 'true' if local_terminal else 'false' }};
     </script>
-    <script src="static/js/main.js"></script>
+    <script src="{{ static_url('js/main.js') }}"></script>
   </body>
 </html>

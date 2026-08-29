@@ -134,6 +134,9 @@ def get_app_settings(options):
     settings = dict(
         template_path=os.path.join(base_dir, 'webssh', 'templates'),
         static_path=os.path.join(base_dir, 'webssh', 'static'),
+        # Recompute static_url hashes per request: a process-lifetime cached
+        # hash kept serving stale JS after file updates until a restart.
+        static_hash_cache=False,
         websocket_ping_interval=options.wpintvl,
         debug=options.debug,
         xsrf_cookies=options.xsrf,
