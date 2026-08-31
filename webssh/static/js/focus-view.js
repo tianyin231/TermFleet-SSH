@@ -16,6 +16,15 @@
     els.tabs = document.getElementById('focus-tabs');
     els.main = document.getElementById('focus-main');
     els.history = document.getElementById('focus-history');
+    els.historyHint = document.getElementById('focus-history-hint');
+    els.tabJournal = document.getElementById('focus-tab-journal');
+    els.tabBroadcast = document.getElementById('focus-tab-broadcast');
+    if (els.tabJournal) {
+      els.tabJournal.addEventListener('click', function () { setSidebarTab('journal'); });
+    }
+    if (els.tabBroadcast) {
+      els.tabBroadcast.addEventListener('click', function () { setSidebarTab('broadcast'); });
+    }
     els.clusterWidget = document.getElementById('cluster-send-widget');
     els.clusterStatus = document.getElementById('cluster-status');
     els.clusterPending = document.getElementById('cluster-pending');
@@ -122,7 +131,7 @@
     els.main.innerHTML = '';
     hostCard(record);
     renderTabs();
-    renderHistory();
+    renderSidebar();
   }
 
   function ensureActive() {
@@ -356,6 +365,241 @@
     renderClusterPanel();
   }
 
+  // ---- Sidebar tabs: command journal (execution history) vs broadcasts ---
+  var sidebarTab = 'journal';
+  var journalSignature = '';
+
+  function setSidebarTab(tab) {
+    sidebarTab = tab;
+    // The two tabs share one container; a stale journal signature would
+    // skip the re-render and leave the other tab's content in place.
+    journalSignature = '';
+    if (els.tabJournal) {
+      els.tabJournal.classList.toggle('is-active', tab === 'journal');
+      els.tabJournal.setAttribute('aria-selected', tab === 'journal' ? 'true' : 'false');
+    }
+    if (els.tabBroadcast) {
+      els.tabBroadcast.classList.toggle('is-active', tab === 'broadcast');
+      els.tabBroadcast.setAttribute('aria-selected', tab === 'broadcast' ? 'true' : 'false');
+    }
+    if (els.historyHint) { els.historyHint.hidden = tab !== 'broadcast'; }
+    renderSidebar();
+  }
+
+  function renderSidebar() {
+    if (els.historyHint) { els.historyHint.hidden = sidebarTab !== 'broadcast'; }
+    if (sidebarTab === 'journal') { renderJournal(); } else { renderHistory(); }
+  }
+
+  // One row per command. Entries sharing the same command within a short
+  // window (a broadcast round) collapse into a single expandable row; the
+  // expanded panel lists every target host vertically with its status dot.
+  var expandedJournalKey = null;
+
+  function groupJournalItems(items) {
+    var grouped = [];
+    items.forEach(function (it) {
+      var last = grouped[grouped.length - 1];
+      if (last && last.command === it.entry.command &&
+          Math.abs(last.time - it.entry.time) <= 3000) {
+        last.items.push(it);
+        if (it.entry.time > last.time) { last.time = it.entry.time; }
+      } else {
+        grouped.push({ command: it.entry.command, time: it.entry.time, items: [it] });
+      }
+    });
+    return grouped;
+  }
+
+  function journalDot(status) {
+    var dot = core.el('span', { class: 'focus-journal-dot', 'aria-hidden': 'true' });
+    if (status !== 'pending') { dot.dataset.exit = status; }
+    return dot;
+  }
+
+  function journalItemStatus(diffInfo, it) {
+    if (diffInfo.command === it.entry.command &&
+        diffInfo.ids.indexOf(it.recordId) >= 0) {
+      return 'warn';
+    }
+    var code = it.entry.exitCode;
+    if (code === null || code === undefined) { return 'pending'; }
+    return code === 0 ? 'ok' : 'err';
+  }
+
+  function journalHostRow(diffInfo, it) {
+    var rec = recordById(it.recordId);
+    var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
+    var row = core.el('button', {
+      class: 'focus-journal-expand-item', type: 'button',
+      title: it.entry.command,
+      'aria-label': core.t('focusJournalLocate', { name: name })
+    }, [
+      journalDot(journalItemStatus(diffInfo, it)),
+      core.el('span', { class: 'focus-journal-host', text: name })
+    ]);
+    row.addEventListener('click', function (event) {
+      event.stopPropagation();
+      locateJournalEntry(it.recordId, it.entry);
+    });
+    return row;
+  }
+
+  function renderJournal() {
+    var record = activeRecord();
+    var group = record ? core.groupById(record.group) : null;
+    var items = group ? core.getGroupJournal(group.id) : [];
+    var cluster = window.WSSH_CLUSTER;
+    var diffInfo = cluster && group ?
+      cluster.getDiffInfo(group.id) : { command: '', ids: [] };
+    var signature = items.map(function (it) {
+      return it.recordId + ':' + it.entry.id + ':' +
+        (it.entry.exitCode === null ? 'p' : it.entry.exitCode);
+    }).join('|') + '@' + diffInfo.command + ':' + diffInfo.ids.join(',') +
+      '@' + (expandedJournalKey || '');
+    if (signature === journalSignature) { return; }
+    journalSignature = signature;
+    els.history.innerHTML = '';
+    if (!items.length) {
+      els.history.appendChild(core.el('div', {
+        class: 'focus-history-empty', text: core.t('focusJournalEmpty')
+      }));
+      return;
+    }
+    var pad = function (n) { return n < 10 ? '0' + n : n; };
+    var list = core.el('div', { class: 'focus-history-list' });
+    groupJournalItems(items).forEach(function (grp) {
+      var d = new Date(grp.time);
+      var timeText = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+
+      if (grp.items.length === 1) {
+        var it = grp.items[0];
+        var rec = recordById(it.recordId);
+        var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
+        var single = core.el('button', {
+          class: 'focus-history-item focus-journal-item', type: 'button',
+          title: name + ' · ' + timeText + '\n' + grp.command,
+          'aria-label': core.t('focusJournalLocate', { name: name })
+        }, [
+          journalDot(journalItemStatus(diffInfo, it)),
+          core.el('span', { class: 'focus-journal-host', text: name }),
+          core.el('span', { class: 'focus-history-command', text: grp.command })
+        ]);
+        single.addEventListener('click', function () {
+          locateJournalEntry(it.recordId, it.entry);
+        });
+        list.appendChild(single);
+        return;
+      }
+
+      // Broadcast round: aggregate status (worst wins) and an elevated,
+      // vertically expanding panel with one row per target host.
+      var key = 'g' + grp.items[0].entry.id;
+      var expanded = expandedJournalKey === key;
+      var aggregate = 'ok';
+      grp.items.forEach(function (it) {
+        var status = journalItemStatus(diffInfo, it);
+        if (status === 'warn') { aggregate = 'warn'; }
+        else if (status === 'err' && aggregate !== 'warn') { aggregate = 'err'; }
+        else if (status === 'pending' && aggregate === 'ok') { aggregate = 'pending'; }
+      });
+      var header = core.el('button', {
+        class: 'focus-history-item focus-journal-item focus-journal-group' +
+          (expanded ? ' is-open' : ''),
+        type: 'button',
+        title: timeText + '\n' + grp.command,
+        'aria-expanded': expanded ? 'true' : 'false'
+      }, [
+        journalDot(aggregate),
+        core.el('span', {
+          class: 'focus-journal-count',
+          text: core.t('focusJournalHosts', { count: grp.items.length })
+        }),
+        core.el('span', { class: 'focus-history-command', text: grp.command }),
+        core.el('span', { class: 'focus-journal-caret', text: '▸', 'aria-hidden': 'true' })
+      ]);
+      header.addEventListener('click', function () {
+        expandedJournalKey = expanded ? null : key;
+        journalSignature = '';
+        renderJournal();
+      });
+      list.appendChild(header);
+
+      var panel = core.el('div', {
+        class: 'focus-journal-expand' + (expanded ? ' is-open' : '')
+      });
+      grp.items.forEach(function (it) { panel.appendChild(journalHostRow(diffInfo, it)); });
+      if (expanded) {
+        panel.style.maxHeight = (grp.items.length * 32 + 10) + 'px';
+      }
+      list.appendChild(panel);
+    });
+    els.history.appendChild(list);
+  }
+
+  // Rows only ever shift down (scrollback trims from the top), so the true
+  // position is at or above the stored row: search upward for the command
+  // echo. Long commands fall back to matching their 40-char tail.
+  function findJournalRow(buffer, fromRow, text) {
+    var start = Math.min(fromRow >= 0 ? fromRow : buffer.length - 1, buffer.length - 1);
+    for (var r = start; r >= 0; r -= 1) {
+      var line = buffer.getLine(r);
+      if (!line) { continue; }
+      var content = line.translateToString(true).replace(/\s+$/, '');
+      if (content.slice(-text.length) === text) { return r; }
+    }
+    return -1;
+  }
+
+  function locateJournalEntry(recordId, entry) {
+    var record = recordById(recordId);
+    if (!record || !record.term) {
+      core.toast(core.t('networkOffline'), 'error');
+      return;
+    }
+    var wasActive = activeId === recordId;
+    if (!wasActive) { activate(record); }
+    var doScroll = function () {
+      var buffer = record.term.buffer &&
+        (record.term.buffer.active || record.term.buffer);
+      var found = buffer ? findJournalRow(buffer, entry.row, entry.command) : -1;
+      if (found < 0 && buffer && entry.command.length > 40) {
+        found = findJournalRow(buffer, entry.row, entry.command.slice(-40));
+      }
+      if (found < 0) {
+        core.toast(core.t('focusJournalLost'), 'error');
+        return;
+      }
+      // Highlight the command AND its output: the block runs from the echo
+      // row to the row above the next prompt (buffer end when this is the
+      // latest command). Without a known prompt only the command line can
+      // be delimited.
+      var endRow = found;
+      if (buffer && record.promptText) {
+        for (var r = found + 1; r < buffer.length; r += 1) {
+          var nextLine = buffer.getLine(r);
+          if (!nextLine) { break; }
+          if (nextLine.translateToString(true).indexOf(record.promptText) === 0) {
+            break;
+          }
+          endRow = r;
+        }
+      }
+      try {
+        record.term.scrollToLine(found);
+        // scrollToLine clamps at the bottom, so the target row is not
+        // necessarily viewport row 0 — derive the real viewport row.
+        var viewRow = found - (buffer.viewportY || 0);
+        if (viewRow < 0) { viewRow = 0; }
+        var rows = endRow - found + 1;
+        record.term.select(0, viewRow, rows * record.term.cols);
+      } catch (e) { /* noop */ }
+    };
+    // A freshly hosted card is re-fitted and scrolled to bottom one frame
+    // later (and once more at ~300 ms); scroll only after that settles.
+    if (wasActive) { doScroll(); } else { window.setTimeout(doScroll, 350); }
+  }
+
   function renderHistory() {
     var record = activeRecord();
     var group = record ? core.groupById(record.group) : null;
@@ -396,6 +640,8 @@
       els.tabs.innerHTML = '';
       els.history.innerHTML = '';
       tabsSignature = '';
+      journalSignature = '';
+      expandedJournalKey = null;
     },
     sync: function () {
       if (!ready() || !core.isFocusMode()) { return; }
@@ -406,7 +652,7 @@
         hostCard(record);
       }
       renderTabs();
-      renderHistory();
+      renderSidebar();
       renderDiff();
     },
     reactivate: function (id) {

@@ -2893,6 +2893,129 @@
         padding: 4px 2px;
       }
 
+      .focus-history-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+        padding: 2px;
+        border: 1px solid var(--segment-line);
+        border-radius: 8px;
+        background: var(--segment-bg, transparent);
+      }
+
+      .focus-history-tab {
+        flex: 1;
+        padding: 4px 6px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--ink-soft);
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .focus-history-tab.is-active {
+        background: var(--segment-active-bg);
+        color: var(--ink);
+      }
+
+      .focus-journal-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .focus-journal-dot {
+        flex: none;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--faint);
+      }
+
+      .focus-journal-dot[data-exit="ok"] { background: #22c55e; }
+      .focus-journal-dot[data-exit="err"] { background: #ef4444; }
+      .focus-journal-dot[data-exit="warn"] { background: var(--warn); box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35); }
+
+      .focus-journal-count {
+        flex: none;
+        padding: 0 6px;
+        border-radius: 6px;
+        background: var(--primary-tint);
+        color: var(--ink-soft);
+        font-size: 11px;
+        line-height: 16px;
+      }
+
+      .focus-journal-caret {
+        flex: none;
+        color: var(--faint);
+        transition: transform 0.2s ease;
+      }
+
+      .focus-journal-group.is-open .focus-journal-caret {
+        transform: rotate(90deg);
+      }
+
+      /* Elevated, vertically expanding panel: one layer above the list,
+         hosts stacked vertically, height+fade animation, never horizontal. */
+      .focus-journal-expand {
+        position: relative;
+        z-index: 2;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(-4px);
+        margin: 0 2px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: var(--panel-solid);
+        transition: max-height 0.25s ease, opacity 0.2s ease,
+          transform 0.25s ease, border-color 0.2s ease, box-shadow 0.25s ease;
+      }
+
+      .focus-journal-expand.is-open {
+        opacity: 1;
+        transform: translateY(0);
+        border-color: var(--segment-line);
+        box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+      }
+
+      .focus-journal-expand-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 10px;
+        border: none;
+        background: transparent;
+        color: var(--ink-soft);
+        font-family: var(--mono);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .focus-journal-expand-item:first-child { border-radius: 8px 8px 0 0; }
+      .focus-journal-expand-item:last-child { border-radius: 0 0 8px 8px; }
+
+      .focus-journal-expand-item:hover {
+        background: var(--segment-hover-bg);
+        color: var(--ink);
+      }
+
+      .focus-journal-host {
+        flex: none;
+        max-width: 72px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--faint);
+        font-family: inherit;
+      }
+
       .focus-stage {
         flex: 1;
         min-width: 0;
@@ -3874,8 +3997,11 @@
                 </div>
               </section>
               <section class="focus-panel focus-panel-grow" id="focus-history-panel">
-                <h2 class="focus-panel-title" id="focus-history-title" data-i18n="broadcastHistory">广播历史</h2>
-                <p class="focus-panel-hint" data-i18n="focusHistoryHint">点击回填到主终端，不自动执行。</p>
+                <div class="focus-history-tabs" role="tablist">
+                  <button class="focus-history-tab is-active" id="focus-tab-journal" type="button" role="tab" aria-selected="true" data-i18n="execHistory">执行历史</button>
+                  <button class="focus-history-tab" id="focus-tab-broadcast" type="button" role="tab" aria-selected="false" data-i18n="broadcastHistory">广播命令候选</button>
+                </div>
+                <p class="focus-panel-hint" id="focus-history-hint" data-i18n="focusHistoryHint">点击回填到主终端，不自动执行。</p>
                 <div class="focus-panel-body" id="focus-history"></div>
               </section>
             </div>

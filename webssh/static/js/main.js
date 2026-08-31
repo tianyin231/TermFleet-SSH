@@ -277,6 +277,11 @@
       sidebarLanguage: '语言',
       focusHistoryHint: '点击回填到主终端，不自动执行。',
       focusHistoryEmpty: '该分组暂无广播历史。',
+      execHistory: '执行历史',
+      focusJournalEmpty: '该分组暂无执行历史。',
+      focusJournalLost: '该命令已滚出终端缓冲，无法定位。',
+      focusJournalLocate: '在 {name} 中定位命令',
+      focusJournalHosts: '{count} 台主机',
       focusEmpty: '没有已打开的终端',
       focusEmptyHint: '从连接表单或主机管理器打开终端',
       focusActivateTab: '切换到 {name}',
@@ -547,6 +552,11 @@
       sidebarLanguage: 'Language',
       focusHistoryHint: 'Click to fill into the main terminal without running it.',
       focusHistoryEmpty: 'No broadcast history for this group yet.',
+      execHistory: 'Command history',
+      focusJournalEmpty: 'No command history for this group yet.',
+      focusJournalLost: 'That command has scrolled out of the terminal buffer.',
+      focusJournalLocate: 'Locate command in {name}',
+      focusJournalHosts: '{count} hosts',
       focusEmpty: 'No open terminals',
       focusEmptyHint: 'Open a terminal from the connect form or the host manager',
       focusActivateTab: 'Switch to {name}',
@@ -3866,6 +3876,9 @@
     var kind = params.charAt(0);
     if (kind === 'C') {
       record.osc133 = true;
+      // The command text is read back from the buffer at execution start;
+      // empty (unknown prompt) simply skips the journal.
+      journalNote(record, clusterExecutedLineText(record));
       if (record.onCommandStart) { record.onCommandStart(); }
       return;
     }
@@ -3877,12 +3890,64 @@
         var parsed = parseInt(params.slice(semi + 1), 10);
         if (!isNaN(parsed)) { exitCode = parsed; }
       }
+      journalSettle(record, exitCode);
       if (record.onCommandEnd) { record.onCommandEnd(exitCode); }
       return;
     }
     if (kind === 'A') {
       record.osc133 = true;
       if (record.onPrompt) { record.onPrompt(); }
+    }
+  }
+
+  // ---- Command journal (focus-mode execution history) --------------------
+  // Session-level per-terminal journal. Entries are anchored by absolute
+  // buffer row; xterm trims shift rows down over time, so the focus view
+  // re-locates by searching upward from the stored row for the command echo.
+  var journalSeq = 0;
+  var JOURNAL_LIMIT = 50; // entries kept per terminal
+
+  function journalBufferRow(record) {
+    try {
+      var buffer = record.term && record.term.buffer &&
+        (record.term.buffer.active || record.term.buffer);
+      return buffer ? buffer.cursorY + buffer.baseY : -1;
+    } catch (e) { return -1; }
+  }
+
+  function journalNote(record, command) {
+    if (!record || !record.term || !command) { return; }
+    if (!record.cmdJournal) { record.cmdJournal = []; }
+    var now = Date.now();
+    var row = journalBufferRow(record);
+    var last = record.cmdJournal[record.cmdJournal.length - 1];
+    if (last && last.exitCode === null && last.command === command &&
+        now - last.time < 5000) {
+      // OSC 133 C refines a dispatch-time entry for the same command.
+      last.row = row;
+      last.time = now;
+    } else {
+      record.cmdJournal.push({
+        id: ++journalSeq, command: command, time: now, exitCode: null, row: row
+      });
+      if (record.cmdJournal.length > JOURNAL_LIMIT) {
+        record.cmdJournal.splice(0, record.cmdJournal.length - JOURNAL_LIMIT);
+      }
+    }
+    notifyFocusView();
+  }
+
+  // D;<exit> settles the most recent unsettled entry. Sequence guarantees it
+  // belongs to the currently executing command: only the hosted terminal can
+  // receive direct input, and it journals through the same path.
+  function journalSettle(record, exitCode) {
+    if (!record.cmdJournal || !record.cmdJournal.length) { return; }
+    for (var i = record.cmdJournal.length - 1; i >= 0; i -= 1) {
+      if (record.cmdJournal[i].exitCode === null) {
+        record.cmdJournal[i].exitCode = exitCode;
+        notifyFocusView();
+        return;
+      }
     }
   }
 
@@ -4298,6 +4363,46 @@
     return text.slice(record.promptText.length);
   }
 
+  // Command text at execution start (OSC 133 C): the Enter echo CRLF may or
+  // may not have flushed into the buffer, so the echo row is either at the
+  // cursor row or just above it. Walk up a few rows to the prompt-prefixed
+  // row, then collect any wrapped continuation rows below it.
+  function clusterExecutedLineText(record) {
+    if (!record.promptText) { return ''; }
+    try {
+      var buffer = record.term.buffer &&
+        (record.term.buffer.active || record.term.buffer);
+      if (!buffer) { return ''; }
+      var row = buffer.cursorY + buffer.baseY;
+      var promptRow = -1;
+      var text = '';
+      for (var r = row; r >= 0 && r >= row - 3; r -= 1) {
+        var line = buffer.getLine(r);
+        if (!line) { continue; }
+        var content = line.translateToString(true);
+        if (content.indexOf(record.promptText) === 0) {
+          promptRow = r;
+          text = content;
+          break;
+        }
+      }
+      if (promptRow < 0) { return ''; }
+      var next = buffer.getLine(promptRow + 1);
+      var offset = promptRow + 1;
+      while (next && next.isWrapped) {
+        text += next.translateToString(true);
+        offset += 1;
+        next = buffer.getLine(offset);
+      }
+      text = text.replace(/\s+$/, '');
+      if (text.indexOf(record.promptText) !== 0) { return ''; }
+      // The learned prompt can carry a trailing space; the dispatched command
+      // has none, so strip any leading whitespace off the read-back command
+      // to keep dispatch-time and OSC 133 C readback strictly equal.
+      return text.slice(record.promptText.length).replace(/^\s+/, '');
+    } catch (e) { return ''; }
+  }
+
   // Learn the prompt prefix from an ordinary typed Enter: the buffer row is
   // prompt + typed line (or the bare prompt on an empty Enter). This works
   // for every shell, so history/completion broadcasting does not depend on
@@ -4370,6 +4475,8 @@
       if (!clusterLineUnknown) { clusterLearnPrompt(record, line); }
       clusterPending = '';
       clusterLineUnknown = false;
+      // Journal at Enter (exact text); a later C mark only refines it.
+      if (line) { journalNote(record, line); }
       // The main terminal receives the Enter through its own keystroke flow;
       // only the typed line is replicated to the other targets.
       clusterBroadcastLine(record, group, line);
@@ -4483,6 +4590,10 @@
         // requires this command's echo anchor in the log, so startup noise
         // stays unjudgeable (no verdict) instead of needing a settle delay.
         clusterArmTargetCapture(group, item);
+        // Dispatch time is the reliable journal point: the command text is
+        // exactly known here. When the shell's C mark later arrives it only
+        // refines this entry (same command within a few seconds).
+        if (line) { journalNote(item, line); }
         try {
           if (sendToRecord(item, payload)) { delivered += 1; } else { failed += 1; }
         } catch (e) {
@@ -6058,6 +6169,21 @@
     rememberBroadcastCommand: rememberBroadcastCommand,
     getBroadcastHistory: function (groupId) {
       return (broadcastHistory[groupId] || []).slice();
+    },
+    // Group-merged command journal, newest first, capped for display.
+    // Entries reference live terminals only: closed cards vanish with their
+    // session-level journal, matching the scrollback lifecycle.
+    getGroupJournal: function (groupId) {
+      var merged = [];
+      Object.keys(terminals).forEach(function (id) {
+        var record = terminals[id];
+        if (record.group !== groupId || !record.cmdJournal) { return; }
+        record.cmdJournal.forEach(function (entry) {
+          merged.push({ recordId: id, entry: entry });
+        });
+      });
+      merged.sort(function (a, b) { return b.entry.time - a.entry.time; });
+      return merged.slice(0, JOURNAL_LIMIT);
     }
   };
 
@@ -6100,6 +6226,16 @@
     getExit: function (groupId) {
       var state = clusterDiff[groupId];
       return (state && state.exit) || {};
+    },
+    // The command the current diff verdict belongs to, with the diverged
+    // ids — lets the journal tint only the matching broadcast round orange.
+    getDiffInfo: function (groupId) {
+      var state = clusterDiff[groupId];
+      if (!state) { return { command: '', ids: [] }; }
+      return {
+        command: state.command,
+        ids: Object.keys(state.diff).filter(function (id) { return state.diff[id]; })
+      };
     },
     clearDiff: function (groupId) {
       clusterClearDiff(groupId);
