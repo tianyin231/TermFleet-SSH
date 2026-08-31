@@ -21,23 +21,37 @@ from tornado.util import errno_from_exception
 BUF_SIZE = 32 * 1024
 clients = {}  # {ip: {id: worker}}
 
+# Per-prompt hooks installed once per session (non-persistent). Besides the
+# OSC 7 cwd report they emit OSC 133 semantic marks: A (prompt start), C
+# (command output start) and D;<exit> (command finished). The frontend uses
+# D as the exact boundary for cluster diff verdicts; shells without hook
+# support keep the OSC 7 + quiet-timer fallback.
 SHELL_DIRECTORY_COMMANDS = {
     'bash': (
-        "__termfleet_ssh_report_cwd(){ printf '\\033]7;file://%s%s\\007' "
-        "\"${HOSTNAME:-localhost}\" \"$PWD\"; }; "
-        "PROMPT_COMMAND=\"__termfleet_ssh_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"; "
-        "__termfleet_ssh_report_cwd"
+        "__termfleet_ssh_prompt(){ local __tf_st=$?; "
+        "printf '\\033]133;D;%d\\007\\033]133;A\\007' \"$__tf_st\"; "
+        "printf '\\033]7;file://%s%s\\007' \"${HOSTNAME:-localhost}\" \"$PWD\"; }; "
+        "PROMPT_COMMAND=\"__termfleet_ssh_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}\"; "
+        "PS0='\\[\\033]133;C\\007\\]'${PS0:+\"$PS0\"}; "
+        "__termfleet_ssh_prompt"
     ),
     'zsh': (
-        "function __termfleet_ssh_report_cwd(){ printf '\\033]7;file://%s%s\\007' "
-        "\"${HOST:-localhost}\" \"$PWD\"; }; "
-        "autoload -Uz add-zsh-hook; add-zsh-hook precmd __termfleet_ssh_report_cwd; "
-        "__termfleet_ssh_report_cwd"
+        "function __termfleet_ssh_prompt(){ local __tf_st=$?; "
+        "printf '\\033]133;D;%d\\007\\033]133;A\\007' \"$__tf_st\"; "
+        "printf '\\033]7;file://%s%s\\007' \"${HOST:-localhost}\" \"$PWD\"; }; "
+        "function __termfleet_ssh_preexec(){ printf '\\033]133;C\\007'; }; "
+        "autoload -Uz add-zsh-hook; "
+        "add-zsh-hook precmd __termfleet_ssh_prompt; "
+        "add-zsh-hook preexec __termfleet_ssh_preexec; "
+        "__termfleet_ssh_prompt"
     ),
     'fish': (
-        "function __termfleet_ssh_report_cwd --on-event fish_prompt; "
+        "function __termfleet_ssh_prompt --on-event fish_prompt; "
+        "printf '\\e]133;D;%s\\a\\e]133;A\\a' $status; "
         "printf '\\e]7;file://%s%s\\a' (hostname) $PWD; end; "
-        "__termfleet_ssh_report_cwd"
+        "function __termfleet_ssh_preexec --on-event fish_preexec; "
+        "printf '\\e]133;C\\a'; end; "
+        "__termfleet_ssh_prompt"
     )
 }
 SHELL_DIRECTORY_READY = b'\x1b]1337;TermFleetShellReady\x07'

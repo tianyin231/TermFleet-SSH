@@ -3026,7 +3026,8 @@
       .focus-tab-dot[data-state="connected"] { background: #22c55e; }
       .focus-tab-dot[data-state="connecting"] { background: var(--faint); }
       .focus-tab-dot[data-state="error"] { background: #ef4444; }
-      .focus-tab-dot[data-forecast="warn"] { background: var(--warn); box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35); }
+      .focus-tab .focus-tab-dot[data-forecast="warn"],
+      .focus-tab.is-broadcast-selected .focus-tab-dot[data-forecast="warn"] { background: var(--warn); box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.35); }
 
       .focus-tab-close {
         display: inline-flex;

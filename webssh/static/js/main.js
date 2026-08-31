@@ -3818,12 +3818,16 @@
 
   function trackTerminalDirectory(record, text) {
     var data = (record.osc7Buffer || '') + (text || '');
-    var pattern = /\x1b\]7;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+    var pattern = /\x1b\](7|133);([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
     var match;
     var consumed = 0;
     while ((match = pattern.exec(data))) {
       consumed = pattern.lastIndex;
-      var uri = match[1];
+      if (match[1] === '133') {
+        handleOsc133(record, match[2]);
+        continue;
+      }
+      var uri = match[2];
       if (uri.indexOf('file://') !== 0) { continue; }
       var pathStart = uri.indexOf('/', 7);
       if (pathStart === -1) { continue; }
@@ -3832,6 +3836,8 @@
       try { path = decodeURIComponent(encodedPath); } catch (e) { path = encodedPath; }
       if (!path || path[0] !== '/' || path.length > 4096 || path.indexOf('\x00') !== -1) { continue; }
       record.osc7Seen = true;
+      // Deferred so the rest of the prompt renders into the buffer first.
+      window.setTimeout(function () { capturePromptText(record); }, 30);
       if (record.onPrompt) { record.onPrompt(); }
       if (record.onOsc7) { record.onOsc7(); }
       if (record.currentDirectory !== path) {
@@ -3844,11 +3850,39 @@
     }
     if (consumed) {
       var remainder = data.slice(consumed);
-      var remainderStart = remainder.lastIndexOf('\x1b]7;');
+      var remainderStart = remainder.lastIndexOf('\x1b]');
       record.osc7Buffer = remainderStart >= 0 ? remainder.slice(remainderStart, remainderStart + 4096) : remainder.slice(-16);
     } else {
-      var start = data.lastIndexOf('\x1b]7;');
+      var start = data.lastIndexOf('\x1b]');
       record.osc7Buffer = start >= 0 ? data.slice(start, start + 4096) : data.slice(-16);
+    }
+  }
+
+  // OSC 133 semantic marks (Final Term shell integration). A = prompt start,
+  // C = command output start, D;<exit> = command finished. D is the exact
+  // end-of-output signal the cluster diff verdict waits for; consumers are
+  // idempotent because hooked shells also emit OSC 7 / A for the same prompt.
+  function handleOsc133(record, params) {
+    var kind = params.charAt(0);
+    if (kind === 'C') {
+      record.osc133 = true;
+      if (record.onCommandStart) { record.onCommandStart(); }
+      return;
+    }
+    if (kind === 'D') {
+      record.osc133 = true;
+      var exitCode = null;
+      var semi = params.indexOf(';');
+      if (semi >= 0) {
+        var parsed = parseInt(params.slice(semi + 1), 10);
+        if (!isNaN(parsed)) { exitCode = parsed; }
+      }
+      if (record.onCommandEnd) { record.onCommandEnd(exitCode); }
+      return;
+    }
+    if (kind === 'A') {
+      record.osc133 = true;
+      if (record.onPrompt) { record.onPrompt(); }
     }
   }
 
@@ -4169,7 +4203,15 @@
 
   // ---- Cluster broadcast (focus mode) ------------------------------------
   var clusterPending = '';   // accumulated input line of the hosted terminal
+  var clusterLineUnknown = false; // history/completion keys rewrote the line
   var clusterDiff = {};      // groupId -> { mainId, diff: {termId: true} }
+
+  // Opt-in diagnostics: set window.WSSH_CLUSTER_DEBUG = true in the console.
+  function clusterLog() {
+    if (!window.WSSH_CLUSTER_DEBUG) { return; }
+    var args = ['[cluster]'].concat(Array.prototype.slice.call(arguments));
+    window.console.log.apply(window.console, args);
+  }
 
   function clusterGroup(record) {
     if (!record || !isFocusMode() || focusActiveId !== record.id) { return null; }
@@ -4194,9 +4236,98 @@
   }
 
   function clusterResetPending() {
+    clusterLineUnknown = false;
     if (clusterPending) {
       clusterPending = '';
       notifyFocusView();
+    }
+  }
+
+  // Current input row of the terminal, including any wrapped rows above it.
+  // The bundled xterm exposes the single-buffer API (term.buffer); newer
+  // releases nest it under term.buffer.active — support both.
+  function clusterBufferLineText(record) {
+    if (!record.term) { return ''; }
+    try {
+      var buffer = record.term.buffer &&
+        (record.term.buffer.active || record.term.buffer);
+      if (!buffer) {
+        clusterLog('buffer-line:no-api', { id: record.id });
+        return '';
+      }
+      var row = buffer.cursorY + buffer.baseY;
+      var text = '';
+      while (row >= 0) {
+        var line = buffer.getLine(row);
+        if (!line) { break; }
+        text = line.translateToString(true) + text;
+        if (!line.isWrapped) { break; }
+        row -= 1;
+      }
+      text = text.replace(/\s+$/, '');
+      if (!text) {
+        clusterLog('buffer-line:empty', {
+          id: record.id, row: row, cursorY: buffer.cursorY,
+          baseY: buffer.baseY, length: buffer.length
+        });
+      }
+      return text;
+    } catch (e) {
+      clusterLog('buffer-line:error', { id: record.id, error: String(e) });
+      return '';
+    }
+  }
+
+  // History (Up/Down), completion (Tab) and caret keys rewrite the input line
+  // in place, so the final text is unknowable from keystrokes. It is read
+  // back from the main terminal's buffer on Enter instead, minus the known
+  // prompt prefix. Without a known prompt the line stays unknowable and
+  // degrades to a bare Enter — never guess.
+  function clusterMainLineText(record) {
+    if (!record.promptText) {
+      clusterLog('main-line:no-prompt');
+      return '';
+    }
+    var text = clusterBufferLineText(record);
+    if (!text || text.indexOf(record.promptText) !== 0) {
+      clusterLog('main-line:prompt-mismatch', {
+        prompt: record.promptText, bufferLine: text
+      });
+      return '';
+    }
+    return text.slice(record.promptText.length);
+  }
+
+  // Learn the prompt prefix from an ordinary typed Enter: the buffer row is
+  // prompt + typed line (or the bare prompt on an empty Enter). This works
+  // for every shell, so history/completion broadcasting does not depend on
+  // the OSC 7 prompt hook, and it tracks prompt changes such as cd.
+  function clusterLearnPrompt(record, typedLine) {
+    var text = clusterBufferLineText(record);
+    if (!text) { return; }
+    if (!typedLine) {
+      record.promptText = text;
+      clusterLog('prompt-learned', { prompt: text, via: 'empty-enter' });
+      return;
+    }
+    if (text.slice(-typedLine.length) === typedLine) {
+      record.promptText = text.slice(0, text.length - typedLine.length);
+      clusterLog('prompt-learned', { prompt: record.promptText, via: 'typed-enter' });
+      return;
+    }
+    clusterLog('prompt-learn:failed', { bufferLine: text, typed: typedLine });
+  }
+
+  // Snapshot the bare prompt once the OSC 7 chunk has flushed into the
+  // buffer (same 30 ms settle as the diff capture). Only fills the prompt
+  // when nothing was learned yet: Enter-based learning is fresher, and a
+  // type-ahead during this window would pollute the snapshot.
+  function capturePromptText(record) {
+    if (record.promptText) { return; }
+    var text = clusterBufferLineText(record);
+    if (text) {
+      record.promptText = text;
+      clusterLog('prompt-captured', { prompt: text, id: record.id });
     }
   }
 
@@ -4231,8 +4362,14 @@
     var body = endsWithEnter ? data.slice(0, -1) : data;
 
     if (endsWithEnter) {
-      var line = clusterPending + body;
+      var line = clusterLineUnknown ? clusterMainLineText(record) : clusterPending + body;
+      clusterLog('enter', {
+        unknown: clusterLineUnknown, pending: clusterPending,
+        line: line, prompt: record.promptText || null
+      });
+      if (!clusterLineUnknown) { clusterLearnPrompt(record, line); }
       clusterPending = '';
+      clusterLineUnknown = false;
       // The main terminal receives the Enter through its own keystroke flow;
       // only the typed line is replicated to the other targets.
       clusterBroadcastLine(record, group, line);
@@ -4240,8 +4377,11 @@
     }
 
     if (body.indexOf('\x1b') >= 0 || body === '\t') {
-      // Completion, history, arrows: the resulting line is unknowable.
+      // Completion, history, arrows: the keystroke-accumulated line is
+      // stale; mark it unknown so Enter reads the real line from the buffer.
       clusterResetPending();
+      clusterLineUnknown = true;
+      clusterLog('line-unknown', { prompt: record.promptText || null });
       return false;
     }
 
@@ -4337,13 +4477,12 @@
     window.setTimeout(function () {
       var delivered = 0;
       var failed = 0;
+      clusterLog('broadcast', { line: line, targets: others.length });
       others.forEach(function (item) {
-        // Targets still settling after connect (banners, first prompt render)
-        // are excluded from the diff verdict for this round. A missing
-        // connectedAt (socket still handshaking) counts as unsettled.
-        var settled = !!item.connectedAt &&
-          Date.now() - item.connectedAt >= 5000;
-        if (settled) { clusterArmTargetCapture(group, item); }
+        // Every target is armed, including right after connect: the verdict
+        // requires this command's echo anchor in the log, so startup noise
+        // stays unjudgeable (no verdict) instead of needing a settle delay.
+        clusterArmTargetCapture(group, item);
         try {
           if (sendToRecord(item, payload)) { delivered += 1; } else { failed += 1; }
         } catch (e) {
@@ -4384,6 +4523,12 @@
       // Let xterm flush the triggering chunk into the buffer before reading.
       window.setTimeout(function () { clusterResolveDiff(group.id, record); }, 30);
     };
+    // OSC 133 D is the authoritative end-of-output signal; the quiet timer
+    // and OSC 7 above stay as fallbacks for shells without the hooks.
+    record.onCommandEnd = function (exitCode) {
+      record.__diffExit = exitCode;
+      window.setTimeout(function () { clusterResolveDiff(group.id, record); }, 30);
+    };
   }
 
   // A target is settled once its output has been quiet for a moment; output
@@ -4405,10 +4550,24 @@
       record.__diffTimer = null;
     }
     record.onOsc7 = null;
+    record.onCommandEnd = null;
     if (record.id === state.mainId || state.diff[record.id] !== undefined) { return; }
     var main = terminals[state.mainId];
     if (!main) { return; }
-    state.diff[record.id] = !clusterCaptureMatches(main, record, state.command);
+    var matches = clusterCaptureMatches(main, record, state.command);
+    // Unjudgeable (no command-echo anchor): record no verdict rather than
+    // guessing — prefer a missed diff over a false one.
+    if (matches === null) {
+      clusterLog('verdict:unjudgeable', { id: record.id, command: state.command });
+      return;
+    }
+    clusterLog('verdict', { id: record.id, same: matches, command: state.command });
+    state.diff[record.id] = !matches;
+    if (record.__diffExit !== undefined && record.__diffExit !== null) {
+      if (!state.exit) { state.exit = {}; }
+      state.exit[record.id] = record.__diffExit;
+    }
+    record.__diffExit = undefined;
     notifyFocusView();
   }
 
@@ -4451,10 +4610,12 @@
       var record = terminals[id];
       record.__diffArm = false;
       record.__diffGroup = null;
+      record.__diffExit = undefined;
       if (record.__diffTimer) {
         window.clearTimeout(record.__diffTimer);
         record.__diffTimer = null;
         record.onOsc7 = null;
+        record.onCommandEnd = null;
       }
     });
     delete clusterDiff[groupId];
@@ -5934,6 +6095,11 @@
       var state = clusterDiff[groupId];
       if (!state) { return []; }
       return Object.keys(state.diff).filter(function (id) { return state.diff[id]; });
+    },
+    // Exit codes captured from OSC 133 D marks, when the shells emit them.
+    getExit: function (groupId) {
+      var state = clusterDiff[groupId];
+      return (state && state.exit) || {};
     },
     clearDiff: function (groupId) {
       clusterClearDiff(groupId);

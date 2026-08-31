@@ -848,6 +848,9 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         pass
 
     def get(self):
+        # The page references content-hashed static assets; without
+        # revalidation a cached page keeps pointing at stale JS/CSS.
+        self.set_header('Cache-Control', 'no-cache')
         self.render('index.html', debug=self.debug, font=self.font,
                     local_terminal=LOCAL_TERMINAL_SUPPORTED)
 

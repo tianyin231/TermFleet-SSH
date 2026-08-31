@@ -168,6 +168,7 @@
         name + ' · ' + record.networkText.textContent : name,
       'aria-label': core.t('focusActivateTab', { name: name })
     }, [dot, core.el('span', { text: name }), closeBtn]);
+    tab.dataset.record = record.id;
     tab.addEventListener('click', function () { activate(record); });
     return tab;
   }
@@ -189,7 +190,49 @@
     return pin;
   }
 
+  // Latency pongs (every 5 s per terminal) and cluster-mode keystrokes call
+  // sync() constantly; rebuilding the tab strip each time replaces the node
+  // under the pointer, which kills :hover and swallows clicks. Rebuild only
+  // when what the tabs render actually changed, and refresh titles in place.
+  var tabsSignature = '';
+
+  function refreshTabTitles() {
+    var tabs = els.tabs.querySelectorAll('.focus-tab[data-record]');
+    Array.prototype.forEach.call(tabs, function (tab) {
+      var record = recordById(tab.getAttribute('data-record'));
+      if (!record) { return; }
+      var name = record.displayName || record.hostname;
+      tab.title = record.networkText ?
+        name + ' · ' + record.networkText.textContent : name;
+    });
+  }
+
   function renderTabs() {
+    var cluster = window.WSSH_CLUSTER;
+    var parts = [activeId || ''];
+    core.getGroups().forEach(function (group) {
+      var members = recordsInGroup(group.id);
+      if (!members.length) { return; }
+      parts.push(group.id, group.name, group.pinned ? '1' : '0',
+        core.groupColorValue(group));
+      var diff = cluster ? cluster.getDiff(group.id) : [];
+      members.forEach(function (record) {
+        parts.push(
+          record.id,
+          record.displayName || record.hostname,
+          record.state || 'connecting',
+          record.broadcastSelected ? '1' : '0',
+          cluster && cluster.isClusterTarget(record) ? '1' : '0',
+          diff.indexOf(record.id) >= 0 ? '1' : '0'
+        );
+      });
+    });
+    var signature = parts.join('|');
+    if (signature === tabsSignature) {
+      refreshTabTitles();
+      return;
+    }
+    tabsSignature = signature;
     var frag = document.createDocumentFragment();
     core.getGroups().forEach(function (group) {
       var members = recordsInGroup(group.id);
@@ -352,6 +395,7 @@
       els.main.innerHTML = '';
       els.tabs.innerHTML = '';
       els.history.innerHTML = '';
+      tabsSignature = '';
     },
     sync: function () {
       if (!ready() || !core.isFocusMode()) { return; }

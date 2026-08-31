@@ -1,7 +1,7 @@
 import unittest
 
 from webssh.worker import (
-    Worker, clear_worker, clients, register_worker
+    SHELL_DIRECTORY_COMMANDS, Worker, clear_worker, clients, register_worker
 )
 
 try:
@@ -115,3 +115,19 @@ class TestWorkerRecycle(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestShellDirectoryCommands(unittest.TestCase):
+
+    def test_hooks_keep_osc7_and_add_osc133_marks(self):
+        for shell in ('bash', 'zsh', 'fish'):
+            hook = SHELL_DIRECTORY_COMMANDS[shell]
+            self.assertIn('\\033]7;', hook.replace('\\e]', '\\033]'),
+                          '{} hook lost its OSC 7 cwd report'.format(shell))
+            normalized = hook.replace('\\e]', '\\033]').replace('\\a', '\\007')
+            for mark in ('133;A', '133;C', '133;D;'):
+                self.assertIn(mark, normalized,
+                              '{} hook misses OSC {}'.format(shell, mark))
+
+    def test_unknown_shell_has_no_hook(self):
+        self.assertNotIn('sh', SHELL_DIRECTORY_COMMANDS)
