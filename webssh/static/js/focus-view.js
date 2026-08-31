@@ -400,7 +400,13 @@
     var grouped = [];
     items.forEach(function (it) {
       var last = grouped[grouped.length - 1];
-      if (last && last.command === it.entry.command &&
+      var batchId = it.entry.batchId || null;
+      var lastBatch = last ? (last.items[0].entry.batchId || null) : null;
+      if (last && batchId && lastBatch && batchId === lastBatch) {
+        last.items.push(it);
+        if (it.entry.time > last.time) { last.time = it.entry.time; }
+      } else if (last && !batchId && !lastBatch &&
+          last.command === it.entry.command &&
           Math.abs(last.time - it.entry.time) <= 3000) {
         last.items.push(it);
         if (it.entry.time > last.time) { last.time = it.entry.time; }

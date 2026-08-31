@@ -3906,6 +3906,11 @@
   // re-locates by searching upward from the stored row for the command echo.
   var journalSeq = 0;
   var JOURNAL_LIMIT = 50; // entries kept per terminal
+  var JOURNAL_DISPLAY_LIMIT = 200; // merged entries shown in the focus journal
+  var journalBatchSeq = 0;
+  function nextJournalBatchId() {
+    return 'b' + Date.now() + '-' + (++journalBatchSeq);
+  }
 
   function journalBufferRow(record) {
     try {
@@ -3915,8 +3920,10 @@
     } catch (e) { return -1; }
   }
 
-  function journalNote(record, command) {
+  function journalNote(record, command, batchId) {
     if (!record || !record.term || !command) { return; }
+    command = String(command).replace(/^\s+/, '');
+    if (!command) { return; }
     if (!record.cmdJournal) { record.cmdJournal = []; }
     var now = Date.now();
     var row = journalBufferRow(record);
@@ -3926,9 +3933,11 @@
       // OSC 133 C refines a dispatch-time entry for the same command.
       last.row = row;
       last.time = now;
+      if (batchId && !last.batchId) { last.batchId = batchId; }
     } else {
       record.cmdJournal.push({
-        id: ++journalSeq, command: command, time: now, exitCode: null, row: row
+        id: ++journalSeq, command: command, time: now, exitCode: null, row: row,
+        batchId: batchId || null
       });
       if (record.cmdJournal.length > JOURNAL_LIMIT) {
         record.cmdJournal.splice(0, record.cmdJournal.length - JOURNAL_LIMIT);
@@ -4476,10 +4485,12 @@
       clusterPending = '';
       clusterLineUnknown = false;
       // Journal at Enter (exact text); a later C mark only refines it.
-      if (line) { journalNote(record, line); }
+      // One batchId per broadcast round so the focus journal can group precisely.
+      var batchId = line ? nextJournalBatchId() : null;
+      if (line) { journalNote(record, line, batchId); }
       // The main terminal receives the Enter through its own keystroke flow;
       // only the typed line is replicated to the other targets.
-      clusterBroadcastLine(record, group, line);
+      clusterBroadcastLine(record, group, line, batchId);
       return false;
     }
 
@@ -4570,7 +4581,7 @@
     });
   }
 
-  function clusterBroadcastLine(record, group, line) {
+  function clusterBroadcastLine(record, group, line, batchId) {
     var others = clusterTargetsOf(group).filter(function (item) {
       return item !== record;
     });
@@ -4593,7 +4604,7 @@
         // Dispatch time is the reliable journal point: the command text is
         // exactly known here. When the shell's C mark later arrives it only
         // refines this entry (same command within a few seconds).
-        if (line) { journalNote(item, line); }
+        if (line) { journalNote(item, line, batchId); }
         try {
           if (sendToRecord(item, payload)) { delivered += 1; } else { failed += 1; }
         } catch (e) {
@@ -6183,7 +6194,7 @@
         });
       });
       merged.sort(function (a, b) { return b.entry.time - a.entry.time; });
-      return merged.slice(0, JOURNAL_LIMIT);
+      return merged.slice(0, JOURNAL_DISPLAY_LIMIT);
     }
   };
 
