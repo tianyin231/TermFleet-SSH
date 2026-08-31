@@ -4279,6 +4279,8 @@
   var clusterPending = '';   // accumulated input line of the hosted terminal
   var clusterLineUnknown = false; // history/completion keys rewrote the line
   var clusterDiff = {};      // groupId -> { mainId, diff: {termId: true} }
+  var clusterBatchMain = {}; // batchId -> mainId, persists beyond the live diff
+  var clusterBatchDiff = {}; // batchId -> live state snapshot for history
 
   // Opt-in diagnostics: set window.WSSH_CLUSTER_DEBUG = true in the console.
   function clusterLog() {
@@ -4589,7 +4591,7 @@
     var payload = line ? line + '\r' : '\r';
     alignClusterTargets(record, others);
     clusterClearDiff(group.id);
-    clusterOpenCapture(group, record, line);
+    clusterOpenCapture(group, record, line, batchId);
     // Give resized targets a moment to repaint their prompt, then deliver the
     // command and arm the screen comparison.
     window.setTimeout(function () {
@@ -4600,7 +4602,7 @@
         // Every target is armed, including right after connect: the verdict
         // requires this command's echo anchor in the log, so startup noise
         // stays unjudgeable (no verdict) instead of needing a settle delay.
-        clusterArmTargetCapture(group, item);
+        clusterArmTargetCapture(group, item, batchId);
         // Dispatch time is the reliable journal point: the command text is
         // exactly known here. When the shell's C mark later arrives it only
         // refines this entry (same command within a few seconds).
@@ -4631,25 +4633,32 @@
 
   // The verdict for every target is read from its xterm buffer, so it never
   // depends on whether the terminal is currently hosted in the main panel.
-  function clusterOpenCapture(group, mainRecord, command) {
-    clusterDiff[group.id] = {
-      mainId: mainRecord.id, diff: {}, command: command || '', fail: 0
+  function clusterOpenCapture(group, mainRecord, command, batchId) {
+    var state = {
+      mainId: mainRecord.id, diff: {}, command: command || '', fail: 0,
+      batchId: batchId || null, groupId: group.id
     };
+    clusterDiff[group.id] = state;
+    if (batchId) {
+      clusterBatchMain[batchId] = mainRecord.id;
+      clusterBatchDiff[batchId] = state;
+    }
   }
 
-  function clusterArmTargetCapture(group, record) {
+  function clusterArmTargetCapture(group, record, batchId) {
     record.__diffArm = true;
     record.__diffGroup = group.id;
+    record.__diffBatch = batchId || (clusterDiff[group.id] && clusterDiff[group.id].batchId) || null;
     clusterArmDiffTimer(record);
     record.onOsc7 = function () {
       // Let xterm flush the triggering chunk into the buffer before reading.
-      window.setTimeout(function () { clusterResolveDiff(group.id, record); }, 30);
+      window.setTimeout(function () { clusterResolveDiff(record); }, 30);
     };
     // OSC 133 D is the authoritative end-of-output signal; the quiet timer
     // and OSC 7 above stay as fallbacks for shells without the hooks.
     record.onCommandEnd = function (exitCode) {
       record.__diffExit = exitCode;
-      window.setTimeout(function () { clusterResolveDiff(group.id, record); }, 30);
+      window.setTimeout(function () { clusterResolveDiff(record); }, 30);
     };
   }
 
@@ -4659,12 +4668,13 @@
   function clusterArmDiffTimer(record) {
     if (record.__diffTimer) { window.clearTimeout(record.__diffTimer); }
     record.__diffTimer = window.setTimeout(function () {
-      clusterResolveDiff(record.__diffGroup, record);
+      clusterResolveDiff(record);
     }, 900);
   }
 
-  function clusterResolveDiff(groupId, record) {
-    var state = clusterDiff[groupId];
+  function clusterResolveDiff(record) {
+    var batchId = record.__diffBatch;
+    var state = (batchId && clusterBatchDiff[batchId]) || (record.__diffGroup && clusterDiff[record.__diffGroup]);
     if (!state) { return; }
     record.__diffArm = false;
     if (record.__diffTimer) {
@@ -4685,6 +4695,16 @@
     }
     clusterLog('verdict', { id: record.id, same: matches, command: state.command });
     state.diff[record.id] = !matches;
+    // Persist the verdict on the journal entry so history keeps its color
+    // after the live diff is cleared by the next broadcast.
+    if (state.batchId && record.cmdJournal) {
+      for (var i = record.cmdJournal.length - 1; i >= 0; i -= 1) {
+        if (record.cmdJournal[i].batchId === state.batchId) {
+          record.cmdJournal[i].diverged = !matches;
+          break;
+        }
+      }
+    }
     if (record.__diffExit !== undefined && record.__diffExit !== null) {
       if (!state.exit) { state.exit = {}; }
       state.exit[record.id] = record.__diffExit;
@@ -6195,6 +6215,9 @@
       });
       merged.sort(function (a, b) { return b.entry.time - a.entry.time; });
       return merged.slice(0, JOURNAL_DISPLAY_LIMIT);
+    },
+    getBatchMain: function (batchId) {
+      return clusterBatchMain[batchId] || null;
     }
   };
 
@@ -6242,11 +6265,15 @@
     // ids — lets the journal tint only the matching broadcast round orange.
     getDiffInfo: function (groupId) {
       var state = clusterDiff[groupId];
-      if (!state) { return { command: '', ids: [] }; }
+      if (!state) { return { command: '', ids: [], batchId: null }; }
       return {
         command: state.command,
-        ids: Object.keys(state.diff).filter(function (id) { return state.diff[id]; })
+        ids: Object.keys(state.diff).filter(function (id) { return state.diff[id]; }),
+        batchId: state.batchId || null
       };
+    },
+    getBatchMain: function (batchId) {
+      return clusterBatchMain[batchId] || null;
     },
     clearDiff: function (groupId) {
       clusterClearDiff(groupId);

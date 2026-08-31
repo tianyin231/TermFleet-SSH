@@ -411,8 +411,18 @@
         last.items.push(it);
         if (it.entry.time > last.time) { last.time = it.entry.time; }
       } else {
-        grouped.push({ command: it.entry.command, time: it.entry.time, items: [it] });
+        grouped.push({ command: it.entry.command, time: it.entry.time, items: [it], batchId: batchId });
       }
+    });
+    // Expanded host lists are ordered by display name (D01-D45) for scanability.
+    grouped.forEach(function (grp) {
+      grp.items.sort(function (a, b) {
+        var ra = recordById(a.recordId);
+        var rb = recordById(b.recordId);
+        var na = ra ? (ra.displayName || ra.hostname || a.recordId) : a.recordId;
+        var nb = rb ? (rb.displayName || rb.hostname || b.recordId) : b.recordId;
+        return na.localeCompare(nb, undefined, { numeric: true, sensitivity: 'base' });
+      });
     });
     return grouped;
   }
@@ -424,6 +434,22 @@
   }
 
   function journalItemStatus(diffInfo, it) {
+    // Persisted verdict takes precedence: history must not be recolored by a later live diff.
+    if (it.entry.diverged === true) { return 'warn'; }
+    if (it.entry.diverged === false) {
+      var code = it.entry.exitCode;
+      if (code === null || code === undefined) { return 'pending'; }
+      return code === 0 ? 'ok' : 'err';
+    }
+    // Live diff only applies to the current batch (same batchId) or to entries without a batchId
+    // that share the same command (legacy fallback).
+    if (diffInfo.batchId && it.entry.batchId) {
+      if (diffInfo.batchId !== it.entry.batchId) {
+        var code2 = it.entry.exitCode;
+        if (code2 === null || code2 === undefined) { return 'pending'; }
+        return code2 === 0 ? 'ok' : 'err';
+      }
+    }
     if (diffInfo.command === it.entry.command &&
         diffInfo.ids.indexOf(it.recordId) >= 0) {
       return 'warn';
@@ -433,16 +459,32 @@
     return code === 0 ? 'ok' : 'err';
   }
 
+  function isMainEntry(it) {
+    var batchId = it.entry.batchId;
+    if (!batchId) { return false; }
+    var mainId = null;
+    if (core.getBatchMain) { mainId = core.getBatchMain(batchId); }
+    else if (window.WSSH_CLUSTER && window.WSSH_CLUSTER.getBatchMain) {
+      mainId = window.WSSH_CLUSTER.getBatchMain(batchId);
+    }
+    return mainId === it.recordId;
+  }
+
   function journalHostRow(diffInfo, it) {
     var rec = recordById(it.recordId);
     var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
+    var badge = null;
+    if (isMainEntry(it)) {
+      badge = core.el('span', { class: 'focus-journal-main', text: '主控' });
+    }
     var row = core.el('button', {
-      class: 'focus-journal-expand-item', type: 'button',
+      class: 'focus-journal-expand-item' + (badge ? ' is-main' : ''), type: 'button',
       title: it.entry.command,
       'aria-label': core.t('focusJournalLocate', { name: name })
     }, [
       journalDot(journalItemStatus(diffInfo, it)),
-      core.el('span', { class: 'focus-journal-host', text: name })
+      core.el('span', { class: 'focus-journal-host', text: name }),
+      badge
     ]);
     row.addEventListener('click', function (event) {
       event.stopPropagation();
@@ -460,7 +502,8 @@
       cluster.getDiffInfo(group.id) : { command: '', ids: [] };
     var signature = items.map(function (it) {
       return it.recordId + ':' + it.entry.id + ':' +
-        (it.entry.exitCode === null ? 'p' : it.entry.exitCode);
+        (it.entry.exitCode === null ? 'p' : it.entry.exitCode) + ':' +
+        (it.entry.diverged ? 'w' : '-') + ':' + (it.entry.batchId || '');
     }).join('|') + '@' + diffInfo.command + ':' + diffInfo.ids.join(',') +
       '@' + (expandedJournalKey || '');
     if (signature === journalSignature) { return; }
@@ -482,13 +525,15 @@
         var it = grp.items[0];
         var rec = recordById(it.recordId);
         var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
+        var badge = isMainEntry(it) ? core.el('span', { class: 'focus-journal-main', text: '主控' }) : null;
         var single = core.el('button', {
-          class: 'focus-history-item focus-journal-item', type: 'button',
+          class: 'focus-history-item focus-journal-item' + (badge ? ' is-main' : ''), type: 'button',
           title: name + ' · ' + timeText + '\n' + grp.command,
           'aria-label': core.t('focusJournalLocate', { name: name })
         }, [
           journalDot(journalItemStatus(diffInfo, it)),
           core.el('span', { class: 'focus-journal-host', text: name }),
+          badge,
           core.el('span', { class: 'focus-history-command', text: grp.command })
         ]);
         single.addEventListener('click', function () {
@@ -509,11 +554,21 @@
         else if (status === 'err' && aggregate !== 'warn') { aggregate = 'err'; }
         else if (status === 'pending' && aggregate === 'ok') { aggregate = 'pending'; }
       });
+      var mainName = null;
+      var batchId = grp.items[0].entry.batchId || null;
+      if (batchId) {
+        var mainId = core.getBatchMain ? core.getBatchMain(batchId) :
+          (window.WSSH_CLUSTER && window.WSSH_CLUSTER.getBatchMain ? window.WSSH_CLUSTER.getBatchMain(batchId) : null);
+        if (mainId) {
+          var mainRec = recordById(mainId);
+          mainName = mainRec ? (mainRec.displayName || mainRec.hostname) : mainId;
+        }
+      }
       var header = core.el('button', {
         class: 'focus-history-item focus-journal-item focus-journal-group' +
           (expanded ? ' is-open' : ''),
         type: 'button',
-        title: timeText + '\n' + grp.command,
+        title: (mainName ? '主控 ' + mainName + ' · ' : '') + timeText + '\n' + grp.command,
         'aria-expanded': expanded ? 'true' : 'false'
       }, [
         journalDot(aggregate),
@@ -521,6 +576,7 @@
           class: 'focus-journal-count',
           text: core.t('focusJournalHosts', { count: grp.items.length })
         }),
+        mainName ? core.el('span', { class: 'focus-journal-main', text: '主控 ' + mainName }) : null,
         core.el('span', { class: 'focus-history-command', text: grp.command }),
         core.el('span', { class: 'focus-journal-caret', text: '▸', 'aria-hidden': 'true' })
       ]);
