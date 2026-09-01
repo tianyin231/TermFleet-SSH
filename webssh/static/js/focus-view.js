@@ -473,18 +473,13 @@
   function journalHostRow(diffInfo, it) {
     var rec = recordById(it.recordId);
     var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
-    var badge = null;
-    if (isMainEntry(it)) {
-      badge = core.el('span', { class: 'focus-journal-main', text: '主控' });
-    }
     var row = core.el('button', {
-      class: 'focus-journal-expand-item' + (badge ? ' is-main' : ''), type: 'button',
+      class: 'focus-journal-expand-item', type: 'button',
       title: it.entry.command,
       'aria-label': core.t('focusJournalLocate', { name: name })
     }, [
       journalDot(journalItemStatus(diffInfo, it)),
-      core.el('span', { class: 'focus-journal-host', text: name }),
-      badge
+      core.el('span', { class: 'focus-journal-host', text: name })
     ]);
     row.addEventListener('click', function (event) {
       event.stopPropagation();
@@ -525,15 +520,13 @@
         var it = grp.items[0];
         var rec = recordById(it.recordId);
         var name = rec ? (rec.displayName || rec.hostname) : it.recordId;
-        var badge = isMainEntry(it) ? core.el('span', { class: 'focus-journal-main', text: '主控' }) : null;
         var single = core.el('button', {
-          class: 'focus-history-item focus-journal-item' + (badge ? ' is-main' : ''), type: 'button',
+          class: 'focus-history-item focus-journal-item', type: 'button',
           title: name + ' · ' + timeText + '\n' + grp.command,
           'aria-label': core.t('focusJournalLocate', { name: name })
         }, [
           journalDot(journalItemStatus(diffInfo, it)),
           core.el('span', { class: 'focus-journal-host', text: name }),
-          badge,
           core.el('span', { class: 'focus-history-command', text: grp.command })
         ]);
         single.addEventListener('click', function () {
@@ -564,19 +557,20 @@
           mainName = mainRec ? (mainRec.displayName || mainRec.hostname) : mainId;
         }
       }
+      if (!mainName) {
+        var fb = recordById(grp.items[0].recordId);
+        mainName = fb ? (fb.displayName || fb.hostname) : grp.items[0].recordId;
+      }
       var header = core.el('button', {
         class: 'focus-history-item focus-journal-item focus-journal-group' +
           (expanded ? ' is-open' : ''),
         type: 'button',
-        title: (mainName ? '主控 ' + mainName + ' · ' : '') + timeText + '\n' + grp.command,
+        title: mainName + ' · ' + timeText + ' · ' + grp.items.length + '\n' + grp.command,
         'aria-expanded': expanded ? 'true' : 'false'
       }, [
         journalDot(aggregate),
-        core.el('span', {
-          class: 'focus-journal-count',
-          text: core.t('focusJournalHosts', { count: grp.items.length })
-        }),
-        mainName ? core.el('span', { class: 'focus-journal-main', text: '主控 ' + mainName }) : null,
+        core.el('span', { class: 'focus-journal-host', text: mainName }),
+        core.el('span', { class: 'focus-journal-count', text: String(grp.items.length) }),
         core.el('span', { class: 'focus-history-command', text: grp.command }),
         core.el('span', { class: 'focus-journal-caret', text: '▸', 'aria-hidden': 'true' })
       ]);
