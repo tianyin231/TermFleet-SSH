@@ -3878,7 +3878,9 @@
       record.osc133 = true;
       // The command text is read back from the buffer at execution start;
       // empty (unknown prompt) simply skips the journal.
-      journalNote(record, clusterExecutedLineText(record));
+      // Reuse the broadcast batchId so a slightly-off readback (e.g. "l" vs "ls") refines in place.
+      var cBatch = record.__diffBatch || null;
+      journalNote(record, clusterExecutedLineText(record), cBatch);
       if (record.onCommandStart) { record.onCommandStart(); }
       return;
     }
@@ -3928,6 +3930,13 @@
     var now = Date.now();
     var row = journalBufferRow(record);
     var last = record.cmdJournal[record.cmdJournal.length - 1];
+    // Same broadcast batch must never create a duplicate entry — refine in place
+    // even when the buffer readback is slightly off (e.g. "l" vs "ls").
+    if (last && batchId && last.batchId && last.batchId === batchId) {
+      last.row = row;
+      last.time = now;
+      return;
+    }
     if (last && last.exitCode === null && last.command === command &&
         now - last.time < 5000) {
       // OSC 133 C refines a dispatch-time entry for the same command.
@@ -4418,7 +4427,8 @@
   // prompt + typed line (or the bare prompt on an empty Enter). This works
   // for every shell, so history/completion broadcasting does not depend on
   // the OSC 7 prompt hook, and it tracks prompt changes such as cd.
-  function clusterLearnPrompt(record, typedLine) {
+  // The xterm buffer may not have flushed the last keystroke yet, so retry once after 30ms.
+  function clusterLearnPrompt(record, typedLine, retry) {
     var text = clusterBufferLineText(record);
     if (!text) { return; }
     if (!typedLine) {
@@ -4429,6 +4439,10 @@
     if (text.slice(-typedLine.length) === typedLine) {
       record.promptText = text.slice(0, text.length - typedLine.length);
       clusterLog('prompt-learned', { prompt: record.promptText, via: 'typed-enter' });
+      return;
+    }
+    if (!retry) {
+      window.setTimeout(function () { clusterLearnPrompt(record, typedLine, true); }, 30);
       return;
     }
     clusterLog('prompt-learn:failed', { bufferLine: text, typed: typedLine });

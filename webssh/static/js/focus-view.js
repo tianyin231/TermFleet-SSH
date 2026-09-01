@@ -408,8 +408,16 @@
       } else if (last && !batchId && !lastBatch &&
           last.command === it.entry.command &&
           Math.abs(last.time - it.entry.time) <= 3000) {
-        last.items.push(it);
-        if (it.entry.time > last.time) { last.time = it.entry.time; }
+        var dup = false;
+        for (var k = 0; k < last.items.length; k += 1) {
+          if (last.items[k].recordId === it.recordId) { dup = true; break; }
+        }
+        if (dup) {
+          grouped.push({ command: it.entry.command, time: it.entry.time, items: [it], batchId: batchId });
+        } else {
+          last.items.push(it);
+          if (it.entry.time > last.time) { last.time = it.entry.time; }
+        }
       } else {
         grouped.push({ command: it.entry.command, time: it.entry.time, items: [it], batchId: batchId });
       }
