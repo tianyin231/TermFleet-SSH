@@ -45,6 +45,16 @@
         if (cluster && group) { cluster.reconnectFailed(group.id); }
       });
     }
+    if (els.tabs) {
+      els.tabs.addEventListener('wheel', function (event) {
+        if (els.tabs.scrollWidth <= els.tabs.clientWidth) { return; }
+        var delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        if (!delta) { return; }
+        // Focus tabs are a single horizontal strip — vertical wheel should pan it without Shift.
+        event.preventDefault();
+        els.tabs.scrollLeft += delta;
+      }, { passive: false });
+    }
     return Boolean(els.tabs && els.main && els.history);
   }
 
@@ -333,9 +343,6 @@
       stop.addEventListener('click', function () { cluster.stopRun(group.id); });
       els.clusterStatus.appendChild(stop);
     } else if (status.on) {
-      els.clusterStatus.appendChild(core.el('span', {
-        text: core.t('clusterSyncCount', { count: status.count })
-      }));
       var diffCount = cluster.getDiff(group.id).length;
       if (diffCount) {
         els.clusterStatus.appendChild(core.el('span', {
