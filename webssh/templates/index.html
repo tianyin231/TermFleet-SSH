@@ -2549,21 +2549,29 @@
         display: none;
       }
 
+      .focus-brand-panel {
+        padding: 2px 4px 0;
+        background: transparent;
+        border: none;
+      }
+
       .focus-brand-panel .focus-brand-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: 8px;
       }
 
       .focus-brand-panel .focus-brand-row + .focus-brand-row {
-        margin-top: 8px;
+        margin-top: 4px;
       }
 
       .focus-brand-name {
-        font-size: 14px;
+        font-size: 16px;
+        font-weight: 800;
         color: var(--ink);
-        letter-spacing: 0.01em;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
       }
 
       .focus-brand-meta .focus-summary {
@@ -2572,23 +2580,24 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 12px;
-        color: var(--faint);
+        font-size: 13px;
+        color: var(--muted);
       }
 
       .cluster-send-widget {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 4px;
-        padding: 4px;
+        gap: 3px;
+        padding: 3px;
         border: 1px solid var(--segment-line);
-        border-radius: var(--radius-sm);
+        border-radius: 10px;
         background: var(--segment-bg);
       }
 
       .cluster-send-widget .cluster-send-option {
-        padding: 6px 4px;
+        padding: 5px 4px;
         font-size: 13px;
+        font-weight: 600;
         border: none;
         border-radius: 7px;
         background: transparent;
@@ -2614,18 +2623,24 @@
       }
 
       .cluster-status {
-        margin-top: 10px;
+        margin-top: 8px;
         font-size: 12px;
-        color: var(--ink-soft);
+        color: var(--muted);
         display: flex;
         align-items: center;
-        gap: 8px;
-        min-height: 18px;
+        gap: 6px;
+        min-height: 16px;
       }
 
       .cluster-status .cluster-status-warn {
-        color: var(--warn);
-        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--danger-tint);
+        color: var(--danger);
+        font-weight: 700;
+        font-size: 12px;
       }
 
       .cluster-status .cluster-stop-btn {
@@ -2634,17 +2649,7 @@
       }
 
       .cluster-pending {
-        margin-top: 8px;
-        padding: 6px 10px;
-        border: 1px dashed var(--primary-hover-line);
-        border-radius: 8px;
-        background: var(--primary-tint);
-        color: var(--ink-soft);
-        font-family: var(--mono);
-        font-size: 12px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: none !important;
       }
 
       .focus-tab-dot[data-sync="on"] {
@@ -2684,10 +2689,9 @@
         display: flex;
         flex-direction: column;
         min-height: 0;
-        background: var(--group-bg);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow-sm);
+        background: transparent;
+        border: none;
+        box-shadow: none;
         overflow: hidden;
         z-index: 1;
       }
@@ -2711,24 +2715,29 @@
         min-height: 0;
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 12px;
+        gap: 8px;
+        padding: 0 2px 8px 0;
         overflow-y: auto;
       }
 
       .focus-panel {
         border: 1px solid var(--line);
         border-radius: 12px;
-        background: var(--panel-soft);
-        padding: 12px 14px;
+        background: var(--panel-solid);
+        padding: 12px;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .focus-brand-panel {
+        box-shadow: none;
       }
 
       .focus-panel-title {
-        margin: 0 0 10px;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        color: var(--muted);
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--ink);
       }
 
       .focus-panel-title-row {
@@ -2783,46 +2792,55 @@
 
       .focus-actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
       }
 
       .focus-action {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 8px;
-        height: 34px;
-        padding: 0 11px;
-        font-size: 13px;
+        justify-content: center;
+        gap: 4px;
+        min-height: 60px;
+        padding: 8px 4px;
+        font-size: 12px;
+        font-weight: 500;
         white-space: nowrap;
         border: 1px solid var(--line);
-        border-radius: 9px;
-        background: var(--segment-active-bg);
+        border-radius: 10px;
+        background: var(--panel-solid);
         color: var(--ink-soft);
         cursor: pointer;
-        transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-      }
-
-      .focus-action svg {
-        flex: none;
-        opacity: 0.75;
-      }
-
-      .focus-action span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
       }
 
       .focus-action:hover {
         border-color: var(--primary-hover-line);
         background: var(--primary-tint);
-        color: var(--ink);
+        color: var(--primary-strong);
       }
 
-      .focus-action:hover svg {
-        opacity: 1;
-        color: var(--primary);
+      .focus-action:active {
+        transform: translateY(1px);
+      }
+
+      .focus-action svg {
+        flex: none;
+        width: 18px;
+        height: 18px;
+        opacity: 0.9;
+      }
+
+      .focus-action span {
+        display: block;
+        overflow: hidden;
+        max-width: 100%;
+        min-width: 0;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        line-height: 1.2;
       }
 
       .focus-action:focus-visible {
@@ -2831,13 +2849,19 @@
       }
 
       .focus-action.is-danger {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        min-height: 38px;
+        justify-content: center;
         color: var(--danger);
         border-color: var(--danger-line);
+        background: var(--panel-solid);
       }
 
       .focus-action.is-danger:hover {
         background: var(--danger-tint);
         border-color: var(--danger);
+        color: var(--danger);
         color: var(--danger);
       }
 
@@ -2895,29 +2919,30 @@
 
       .focus-history-tabs {
         display: flex;
-        gap: 4px;
-        margin-bottom: 6px;
-        padding: 2px;
-        border: 1px solid var(--segment-line);
-        border-radius: 8px;
-        background: var(--segment-bg, transparent);
+        gap: 16px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--line);
       }
 
       .focus-history-tab {
-        flex: 1;
-        padding: 4px 6px;
+        position: relative;
+        padding: 8px 2px 10px;
         border: none;
-        border-radius: 6px;
+        border-bottom: 2px solid transparent;
         background: transparent;
-        color: var(--ink-soft);
-        font-size: 12px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 500;
         cursor: pointer;
-        transition: background 0.15s ease, color 0.15s ease;
+        transition: color 0.15s ease, border-color 0.15s ease;
+        margin-bottom: -1px;
       }
 
       .focus-history-tab.is-active {
-        background: var(--segment-active-bg);
+        background: transparent;
         color: var(--ink);
+        font-weight: 700;
+        border-bottom-color: var(--ink);
       }
 
       .focus-journal-item {
@@ -3810,21 +3835,19 @@
               <span data-i18n="installApp">安装应用</span>
             </button>
             <button class="btn" type="button" id="open-host-manager" aria-keyshortcuts="Control+Shift+H Meta+Shift+H" data-i18n-title="hostManager" data-i18n-aria-label="hostManager" title="主机管理" aria-label="主机管理">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/>
-                <rect x="4" y="14" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/>
-                <path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span data-i18n="hosts">主机</span>
             </button>
             <button class="btn" type="button" id="open-system-settings" data-i18n-title="systemSettings" data-i18n-aria-label="systemSettings" title="系统设置" aria-label="系统设置">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 7h7M15 7h5M11 4v6M4 17h4M12 17h8M8 14v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 9 15a1.65 1.65 0 0 0-1-1.51V13a2 2 0 0 1 4 0v.49c.38.22.83.3 1.28.22a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
               <span data-i18n="systemSettings">系统设置</span>
             </button>
-            <button class="btn btn-compact" type="button" id="open-log" data-i18n="operationLog" data-i18n-title="operationLog" data-i18n-aria-label="operationLog">日志</button>
-            <button class="btn" type="button" id="open-local-terminal">
+            <button class="btn" type="button" id="open-log" data-i18n-title="operationLog" data-i18n-aria-label="operationLog" title="操作日志" aria-label="操作日志">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <span data-i18n="operationLog">日志</span>
+            </button>
+            <button class="btn" type="button" id="open-local-terminal" data-i18n-title="localTerminal" data-i18n-aria-label="localTerminal" title="本机终端" aria-label="本机终端">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span data-i18n="localTerminal">本机终端</span>
             </button>
             <button class="btn" type="button" id="mode-toggle" aria-pressed="false" data-i18n-title="toggleFocusMode" data-i18n-aria-label="toggleFocusMode" title="切换聚焦模式" aria-label="切换聚焦模式">
@@ -3979,34 +4002,37 @@
                 <h2 class="focus-panel-title" data-i18n="focusActionsTitle">快捷操作</h2>
                 <div class="focus-actions" id="focus-actions">
                   <button class="btn focus-action" type="button" id="focus-connect" data-i18n-title="connectServer" data-i18n-aria-label="connectServer" title="连接服务器" aria-label="连接服务器">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-6 14-2-5-6-2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-                    <span data-i18n="connectServer">连接服务器</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><rect x="4" y="14" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span>连接</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-hosts" data-i18n-title="hostManager" data-i18n-aria-label="hostManager" title="主机管理" aria-label="主机管理">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><rect x="4" y="14" width="16" height="6" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 7h.01M8 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    <span data-i18n="hostManager">主机管理</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>主机</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-system-settings" data-i18n-title="systemSettings" data-i18n-aria-label="systemSettings" title="系统设置" aria-label="系统设置">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h7M15 7h5M11 4v6M4 17h4M12 17h8M8 14v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    <span data-i18n="systemSettings">系统设置</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 9 15a1.65 1.65 0 0 0-1-1.51V13a2 2 0 0 1 4 0v.49c.38.22.83.3 1.28.22a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                    <span>设置</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-log" data-i18n-title="operationLog" data-i18n-aria-label="operationLog" title="操作日志" aria-label="操作日志">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    <span data-i18n="operationLog">日志</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span>日志</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-local-terminal" data-i18n-title="localTerminal" data-i18n-aria-label="localTerminal" title="本机终端" aria-label="本机终端">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <span data-i18n="localTerminal">本机终端</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/><path d="m7 9 3 3-3 3M13 15h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>终端</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-new-group" data-i18n-title="newGroup" data-i18n-aria-label="newGroup" title="新建分组" aria-label="新建分组">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    <span data-i18n="newGroup">新建分组</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 11v6M9 14h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <span>分组</span>
                   </button>
                   <button class="btn focus-action" type="button" id="focus-theme" data-i18n-title="sidebarTheme" data-i18n-aria-label="sidebarTheme" title="主题" aria-label="主题">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span data-i18n="sidebarTheme">主题</span>
                   </button>
-                  <button class="btn focus-action" type="button" id="focus-language" data-i18n="languageButton" data-i18n-title="sidebarLanguage" data-i18n-aria-label="sidebarLanguage" title="语言" aria-label="语言">EN</button>
+                  <button class="btn focus-action" type="button" id="focus-language" data-i18n-title="sidebarLanguage" data-i18n-aria-label="sidebarLanguage" title="语言" aria-label="语言">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                    <span data-i18n="languageButton">EN</span>
+                  </button>
                   <button class="btn focus-action is-danger" type="button" id="focus-disconnect-all" data-i18n-title="disconnectAll" data-i18n-aria-label="disconnectAll" title="全部断开" aria-label="全部断开">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64M12 2v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     <span data-i18n="disconnectAll">全部断开</span>
