@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import traceback
+import uuid
 import weakref
 import paramiko
 import tornado.gen
@@ -59,6 +60,9 @@ except ImportError:
 DEFAULT_PORT = 22
 HOST_PATTERN_CHARS = set('*?!')
 BATCH_WORKER_GRACE = 30
+# Per-process boot token: changes on every server restart so the browser can
+# tell "page refresh" apart from "server restarted" for terminal refill.
+BOOT_ID = uuid.uuid4().hex
 
 
 def windows_shell_command(name):
@@ -852,7 +856,7 @@ class IndexHandler(MixinHandler, tornado.web.RequestHandler):
         # revalidation a cached page keeps pointing at stale JS/CSS.
         self.set_header('Cache-Control', 'no-cache')
         self.render('index.html', debug=self.debug, font=self.font,
-                    local_terminal=LOCAL_TERMINAL_SUPPORTED)
+                    local_terminal=LOCAL_TERMINAL_SUPPORTED, boot_id=BOOT_ID)
 
     @tornado.gen.coroutine
     def post(self):

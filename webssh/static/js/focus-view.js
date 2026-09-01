@@ -482,7 +482,17 @@
     else if (window.WSSH_CLUSTER && window.WSSH_CLUSTER.getBatchMain) {
       mainId = window.WSSH_CLUSTER.getBatchMain(batchId);
     }
-    return mainId === it.recordId;
+    if (!mainId) { return false; }
+    if (mainId === it.recordId) { return true; }
+    var rec = recordById(it.recordId);
+    if (rec && rec.persistentId && mainId === rec.persistentId) { return true; }
+    // Fallback: search by persistentId when mainId is persistent
+    if (rec) { return false; }
+    var all = allRecords();
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].persistentId === mainId && all[i].id === it.recordId) { return true; }
+    }
+    return false;
   }
 
   function journalHostRow(diffInfo, it) {
@@ -569,6 +579,12 @@
           (window.WSSH_CLUSTER && window.WSSH_CLUSTER.getBatchMain ? window.WSSH_CLUSTER.getBatchMain(batchId) : null);
         if (mainId) {
           var mainRec = recordById(mainId);
+          if (!mainRec) {
+            var allRecs = allRecords();
+            for (var mi = 0; mi < allRecs.length; mi += 1) {
+              if (allRecs[mi].persistentId === mainId) { mainRec = allRecs[mi]; break; }
+            }
+          }
           mainName = mainRec ? (mainRec.displayName || mainRec.hostname) : mainId;
         }
       }

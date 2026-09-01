@@ -4171,6 +4171,10 @@
               <span data-i18n="broadcastEnter">广播命令自动回车</span>
               <input type="checkbox" id="setting-broadcast-enter" checked>
             </label>
+            <label class="setting-row" for="setting-restart-refill">
+              <span data-i18n="restartRefill">重启后回填终端内容</span>
+              <input type="checkbox" id="setting-restart-refill">
+            </label>
             <label class="setting-row" for="setting-font-size">
               <span data-i18n="terminalFontSize">终端字号</span>
               <input type="number" id="setting-font-size" min="10" max="24" value="13">
@@ -4329,6 +4333,7 @@
     <script src="{{ static_url('js/focus-view.js') }}"></script>
     <script>
       window.WSSH_LOCAL_TERMINAL = {{ 'true' if local_terminal else 'false' }};
+      window.WSSH_BOOT_ID = '{{ boot_id }}';
     </script>
     <script src="{{ static_url('js/main.js') }}"></script>
   </body>

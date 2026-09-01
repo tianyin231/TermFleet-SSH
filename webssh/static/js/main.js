@@ -200,6 +200,7 @@
       notSet: '未设置',
       confirmDisconnect: '断开全部前确认',
       broadcastEnter: '广播命令自动回车',
+      restartRefill: '重启后回填终端内容',
       terminalFontSize: '终端字号',
       terminalHeight: '终端默认高度',
       operationLog: '操作日志',
@@ -475,6 +476,7 @@
       notSet: 'Not set',
       confirmDisconnect: 'Confirm before disconnect all',
       broadcastEnter: 'Append Enter to broadcasts',
+      restartRefill: 'Restore terminals after restart',
       terminalFontSize: 'Terminal font size',
       terminalHeight: 'Default terminal height',
       operationLog: 'Operation log',
@@ -752,6 +754,7 @@
   var sshConfigHosts = [];
   var confirmDisconnectInput = $('#setting-confirm-disconnect');
   var broadcastEnterInput = $('#setting-broadcast-enter');
+  var restartRefillInput = $('#setting-restart-refill');
   var fontSizeInput = $('#setting-font-size');
   var terminalHeightInput = $('#setting-terminal-height');
   var maxTerminalsInput = $('#setting-max-terminals');
@@ -866,6 +869,7 @@
     var defaults = {
       confirmDisconnect: true,
       broadcastEnter: true,
+      restartRefill: false,
       panelsPinned: false,
       uiMode: 'workspace',
       terminalFontSize: 13,
@@ -1026,6 +1030,7 @@
   function applySettingsToControls() {
     confirmDisconnectInput.checked = settings.confirmDisconnect;
     broadcastEnterInput.checked = settings.broadcastEnter;
+    restartRefillInput.checked = settings.restartRefill;
     fontSizeInput.value = settings.terminalFontSize;
     terminalHeightInput.value = settings.terminalHeight;
     maxTerminalsInput.value = settings.maxTerminals;
@@ -1183,6 +1188,7 @@
   function updateSettingsFromControls() {
     settings.confirmDisconnect = confirmDisconnectInput.checked;
     settings.broadcastEnter = broadcastEnterInput.checked;
+    settings.restartRefill = restartRefillInput.checked;
     settings.terminalFontSize = Math.max(10, Math.min(24, Number(fontSizeInput.value) || 13));
     settings.terminalHeight = Math.max(180, Math.min(720, Number(terminalHeightInput.value) || 300));
     settings.maxTerminals = Math.max(1, Math.min(500, Number(maxTerminalsInput.value) || 20));
@@ -1191,6 +1197,11 @@
     saveSettings();
     saveSystemSettings();
     logAction('logSettings');
+    if (settings.restartRefill) {
+      pushRestartRefillSnapshot();
+    } else {
+      clearRestartRefillStorage();
+    }
     Object.keys(terminals).forEach(function (id) {
       var record = terminals[id];
       if (record.term) {
@@ -3185,6 +3196,8 @@
       retryConnection: null, socketRetrying: false, socketTimer: null
     };
     terminals[id] = record;
+    restoreJournalForRecord(record);
+    loadTerminalLog(record);
     refreshTerminalBroadcastSelection(record);
 
     // Interactions.
@@ -3353,6 +3366,9 @@
     updateEmptyState(group);
     updateGroupGridSpan(group);
     notifyFocusView();
+    saveJournal();
+    removeTerminalLog(record);
+    if (record._logSaveTimer) { window.clearTimeout(record._logSaveTimer); record._logSaveTimer = null; }
   }
 
   function fitTerminal(record) {
@@ -3780,7 +3796,122 @@
 
   // ---- SSH transport (unchanged contract) --------------------------------
   var LOG_BUFFER_LIMIT = 1024 * 1024;
-
+  var LOG_STORAGE_KEY = 'wssh-logs';
+  var LOG_STORAGE_LIMIT = 200 * 1024;
+  // Dual-layer persistence:
+  // - refresh refill (default): a page reload reads/writes sessionStorage.
+  // - restart refill (opt-in): a fresh navigation reads/writes localStorage
+  //   only while settings.restartRefill is on.
+  // The active layer is chosen from the navigation type at bootstrap, never
+  // from where data happens to still exist: browser session-restore preserves
+  // sessionStorage across a "restart", so "is there sessionStorage data?"
+  // cannot distinguish refresh from restart.
+  var activeStore = null;
+  function isPageReload() {
+    try {
+      var nav = window.performance && window.performance.getEntriesByType ?
+        window.performance.getEntriesByType('navigation') : null;
+      if (nav && nav.length && nav[0].type) { return nav[0].type === 'reload'; }
+    } catch (e) {}
+    try {
+      if (window.performance && window.performance.navigation) {
+        return window.performance.navigation.type === 1;
+      }
+    } catch (e) {}
+    // Unknown navigation type: lean toward "reload" so the default refresh
+    // refill always works; the opt-in restart-refill layer simply stays off.
+    return true;
+  }
+  var BOOT_STORAGE_KEY = 'wssh-boot-id';
+  function initPersistenceLayer() {
+    // A page reload after a server restart is still a "reload" navigation,
+    // so it cannot be told apart from F5 by navigation type alone. Compare
+    // the server process boot token instead: a mismatch means the server
+    // restarted and the stashed buffers/journal belong to dead sessions.
+    var bootId = window.WSSH_BOOT_ID || '';
+    var prevBoot = null;
+    try { prevBoot = window.sessionStorage.getItem(BOOT_STORAGE_KEY); } catch (e) {}
+    if (bootId && prevBoot !== null && prevBoot !== bootId && !settings.restartRefill) {
+      [LOG_STORAGE_KEY, JOURNAL_STORAGE_KEY, JOURNAL_MAIN_KEY].forEach(function (key) {
+        try { window.sessionStorage.removeItem(key); } catch (e) {}
+      });
+    }
+    if (bootId) {
+      try { window.sessionStorage.setItem(BOOT_STORAGE_KEY, bootId); } catch (e) {}
+    }
+    if (isPageReload()) {
+      activeStore = window.sessionStorage; // refresh refill
+    } else if (settings.restartRefill) {
+      activeStore = window.localStorage; // restart refill
+    } else {
+      activeStore = null;
+    }
+  }
+  function storeGet(key) {
+    if (!activeStore) { return null; }
+    try { return activeStore.getItem(key); } catch (e) {}
+    return null;
+  }
+  function storeSet(key, value) {
+    // sessionStorage is always written so a later refresh still refills;
+    // localStorage is mirrored only while the restart-refill setting is on.
+    try { window.sessionStorage.setItem(key, value); } catch (e) {}
+    if (settings.restartRefill) {
+      try { window.localStorage.setItem(key, value); } catch (e) {}
+    }
+  }
+  function saveTerminalLog(record) {
+    if (!record || !record.persistentId) { return; }
+    try {
+      var storeRaw = storeGet(LOG_STORAGE_KEY);
+      var store = storeRaw ? JSON.parse(storeRaw) : {};
+      var data = record.logBuffer || '';
+      if (data.length > LOG_STORAGE_LIMIT) {
+        data = data.slice(-LOG_STORAGE_LIMIT);
+        var nl = data.indexOf('\n');
+        if (nl >= 0) { data = data.slice(nl + 1); }
+      }
+      store[record.persistentId] = data;
+      storeSet(LOG_STORAGE_KEY, JSON.stringify(store));
+    } catch (e) {}
+  }
+  function loadTerminalLog(record) {
+    if (!record || !record.persistentId) { return; }
+    try {
+      var storeRaw = storeGet(LOG_STORAGE_KEY);
+      if (!storeRaw) { return; }
+      var store = JSON.parse(storeRaw);
+      var data = store[record.persistentId];
+      if (typeof data === 'string' && data) {
+        record.logBuffer = data;
+      }
+    } catch (e) {}
+  }
+  function removeTerminalLog(record) {
+    if (!record || !record.persistentId) { return; }
+    [window.sessionStorage, window.localStorage].forEach(function (storage) {
+      try {
+        var raw = storage.getItem(LOG_STORAGE_KEY);
+        if (!raw) { return; }
+        var store = JSON.parse(raw);
+        if (store[record.persistentId] !== undefined) {
+          delete store[record.persistentId];
+          storage.setItem(LOG_STORAGE_KEY, JSON.stringify(store));
+        }
+      } catch (e) {}
+    });
+  }
+  function clearRestartRefillStorage() {
+    [LOG_STORAGE_KEY, JOURNAL_STORAGE_KEY, JOURNAL_MAIN_KEY].forEach(function (key) {
+      try { window.localStorage.removeItem(key); } catch (e) {}
+    });
+  }
+  function pushRestartRefillSnapshot() {
+    try {
+      Object.keys(terminals).forEach(function (id) { saveTerminalLog(terminals[id]); });
+    } catch (e) {}
+    saveJournal();
+  }
   function appendTerminalLog(record, text) {
     if (!record || !text) { return; }
     record.logBuffer += text;
@@ -3789,6 +3920,12 @@
       record.logBuffer = record.logBuffer.slice(-Math.floor(LOG_BUFFER_LIMIT / 2));
     }
     if (record.__diffArm) { clusterArmDiffTimer(record); }
+    // Debounced persist for refresh refill
+    if (record._logSaveTimer) { window.clearTimeout(record._logSaveTimer); }
+    record._logSaveTimer = window.setTimeout(function () {
+      record._logSaveTimer = null;
+      saveTerminalLog(record);
+    }, 800);
   }
 
   function stripAnsiEscapes(text) {
@@ -3913,6 +4050,56 @@
   function nextJournalBatchId() {
     return 'b' + Date.now() + '-' + (++journalBatchSeq);
   }
+  var JOURNAL_STORAGE_KEY = 'wssh-journal';
+  var JOURNAL_MAIN_KEY = 'wssh-journal-mains';
+  function loadJournalStore() {
+    try {
+      var raw = storeGet(JOURNAL_STORAGE_KEY);
+      var mainsRaw = storeGet(JOURNAL_MAIN_KEY);
+      var data = raw ? JSON.parse(raw) : {};
+      var mains = mainsRaw ? JSON.parse(mainsRaw) : {};
+      if (data && typeof data === 'object' && !Array.isArray(data)) { return { data: data, mains: mains }; }
+    } catch (e) {}
+    return { data: {}, mains: {} };
+  }
+  function saveJournal() {
+    try {
+      var store = {};
+      Object.keys(terminals).forEach(function (id) {
+        var rec = terminals[id];
+        if (!rec || !rec.persistentId || !rec.cmdJournal || !rec.cmdJournal.length) { return; }
+        store[rec.persistentId] = rec.cmdJournal.slice(-JOURNAL_LIMIT);
+      });
+      storeSet(JOURNAL_STORAGE_KEY, JSON.stringify(store));
+      storeSet(JOURNAL_MAIN_KEY, JSON.stringify(clusterBatchMain));
+    } catch (e) {}
+  }
+  function restoreJournalForRecord(record) {
+    if (!record || !record.persistentId) { return; }
+    try {
+      var raw = storeGet(JOURNAL_STORAGE_KEY);
+      if (!raw) { return; }
+      var store = JSON.parse(raw);
+      var entries = store[record.persistentId];
+      if (!Array.isArray(entries) || !entries.length) { return; }
+      record.cmdJournal = entries.map(function (e) {
+        if (e.id > journalSeq) { journalSeq = e.id; }
+        return {
+          id: e.id, command: e.command, time: e.time, exitCode: e.exitCode, row: typeof e.row === 'number' ? e.row : -1,
+          batchId: e.batchId || null, diverged: e.diverged === true ? true : (e.diverged === false ? false : undefined)
+        };
+      }).slice(-JOURNAL_LIMIT);
+      if (record.cmdJournal.length) { notifyFocusView(); }
+    } catch (e) {}
+  }
+  function restoreJournalMains() {
+    try {
+      var raw = storeGet(JOURNAL_MAIN_KEY);
+      if (!raw) { return; }
+      var mains = JSON.parse(raw);
+      Object.keys(mains).forEach(function (k) { if (!clusterBatchMain[k]) { clusterBatchMain[k] = mains[k]; } });
+    } catch (e) {}
+  }
 
   function journalBufferRow(record) {
     try {
@@ -3935,6 +4122,7 @@
     if (last && batchId && last.batchId && last.batchId === batchId) {
       last.row = row;
       last.time = now;
+      saveJournal();
       return;
     }
     if (last && last.exitCode === null && last.command === command &&
@@ -3953,6 +4141,7 @@
       }
     }
     notifyFocusView();
+    saveJournal();
   }
 
   // D;<exit> settles the most recent unsettled entry. Sequence guarantees it
@@ -3964,6 +4153,7 @@
       if (record.cmdJournal[i].exitCode === null) {
         record.cmdJournal[i].exitCode = exitCode;
         notifyFocusView();
+        saveJournal();
         return;
       }
     }
@@ -4003,6 +4193,11 @@
       record.connectedAt = Date.now();
       record.body.innerHTML = '';
       term.open(record.body);
+      if (record.logBuffer) {
+        try { term.write(record.logBuffer); } catch (e) {}
+        // Ensure prompt line is visible after replay
+        try { term.scrollToBottom(); } catch (e) {}
+      }
       setCardState(record, 'connected', null, 'connected');
       fitTerminal(record);
       term.focus();
@@ -4654,8 +4849,9 @@
     };
     clusterDiff[group.id] = state;
     if (batchId) {
-      clusterBatchMain[batchId] = mainRecord.id;
+      clusterBatchMain[batchId] = mainRecord.persistentId || mainRecord.id;
       clusterBatchDiff[batchId] = state;
+      saveJournal();
     }
   }
 
@@ -4715,6 +4911,7 @@
       for (var i = record.cmdJournal.length - 1; i >= 0; i -= 1) {
         if (record.cmdJournal[i].batchId === state.batchId) {
           record.cmdJournal[i].diverged = !matches;
+          saveJournal();
           break;
         }
       }
@@ -6015,7 +6212,7 @@
 
   $('#disconnect-all').addEventListener('click', disconnectAllTerminals);
 
-  [confirmDisconnectInput, broadcastEnterInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput, connectionConcurrencyInput].forEach(function (input) {
+  [confirmDisconnectInput, broadcastEnterInput, restartRefillInput, fontSizeInput, terminalHeightInput, maxTerminalsInput, maxUploadSizeInput, connectionConcurrencyInput].forEach(function (input) {
     input.addEventListener('change', updateSettingsFromControls);
   });
   resetShortcutsButton.addEventListener('click', function () {
@@ -6337,6 +6534,17 @@
   };
 
   // ---- Bootstrap ---------------------------------------------------------
+  initPersistenceLayer();
+  restoreJournalMains();
+  window.addEventListener('beforeunload', function () {
+    try { saveJournal(); } catch (e) {}
+    try {
+      Object.keys(terminals).forEach(function (id) { saveTerminalLog(terminals[id]); });
+    } catch (e) {}
+  });
+  window.addEventListener('pagehide', function () {
+    try { saveJournal(); } catch (e) {}
+  });
   registerServiceWorker();
   applyLanguage();
   applySettingsToControls();
