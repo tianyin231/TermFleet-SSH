@@ -4186,6 +4186,17 @@
       }
     });
 
+    // Caps Lock during IME composition commits the pending text via compositionend.
+    // xterm's composition helper treats that keydown as an interrupt and sends the
+    // pre-edit text immediately, so the committed text would be sent twice; swallow
+    // the keydown and let the compositionend path send it once.
+    term.attachCustomKeyEventHandler(function (event) {
+      if (event.type === 'keydown' && event.isComposing && event.keyCode === 20) {
+        return false;
+      }
+      return true;
+    });
+
     sock.onopen = function () {
       if (record.sock !== sock) { return; }
       record.retryConnection = null;
