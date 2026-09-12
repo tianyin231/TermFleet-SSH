@@ -1,246 +1,57 @@
 TermFleet-SSH
 =============
 
-TermFleet-SSH 是一个基于 Web 的 SSH 集群管理控制台，面向需要同时连接、分组、广播操作多台主机的场景。后端使用 Tornado、Paramiko 和 xterm.js，前端提供工作组、终端窗口、文件上传、SSH 配置识别、本机终端、操作日志和中英文切换。
+Multiple hosts. One workspace.
 
-项目声明
+TermFleet-SSH is a self-hosted Web SSH workspace with dynamic terminal groups,
+scoped command broadcasting and individual or group file uploads.
+
+Features
 --------
 
-本项目基于原 WebSSH 项目改造，原项目地址：
+* Organize SSH terminals into movable, resizable workgroups.
+* Switch between side-by-side workspace and single-terminal focus modes.
+* Broadcast commands and control keys to all or selected terminals in a group.
+* Discover hosts from the server's OpenSSH configuration.
+* Upload files through SFTP and review each destination path.
+* Restore browser layouts and recreate terminal windows in pinned groups.
+* Use server-local terminals, configurable shortcuts, themes and a bilingual UI.
 
-https://github.com/huashengdun/webssh
+Install from this repository
+----------------------------
 
-主要功能
---------
+Requires Python 3.10+ and a modern browser. Use a Python virtual environment.
+After activating it, run:
 
-- 多终端窗口管理，支持拖动、重命名、最大化、关闭和重新连接。
-- 工作组管理，支持新建、删除、重命名、拖动排序、横向调整宽度、工作组全屏、固定终端清单和批量重连失败终端。
-- 默认分组按“整高半屏 + 两个上下堆叠的四分之一屏”循环向右拼接：1 个分组占满主面板，2 个各占半屏，3 个为左侧整高半屏加右侧两个上下堆叠分组，更多分组以半屏为单位横向分页。
-- 桌面端顶部工具栏和连接侧栏默认收缩，鼠标靠近或键盘焦点进入时以覆盖层自动展开。
-- 使用 ``Ctrl+Alt+P``（Windows/Linux）或 ``Command+Option+P``（macOS）可在“顶栏与侧栏固定展开”和“自动收缩”之间切换，选择会在刷新后保留。
-- 刷新页面后恢复仍在服务端存活的终端窗口。
-- 使用浏览器本地 JSON 持久化工作组布局；固定分组可在服务重启后恢复其中的终端窗口。
-- 支持普通 SSH 表单连接、私钥文件、私钥口令、TOTP。
-- 后端读取 OpenSSH 配置文件，默认读取 ``~/.ssh/config``。
-- 右上角主机管理器支持查看 SSH 配置主机、按分组查看已打开终端，并批量打开到当前分组。
-- 支持打开本机终端，不需要 SSH。
-- 支持点击左侧提示按钮或使用 ``Ctrl/Command+Shift+C`` 打开连接模态框，并可在系统设置中自定义快捷键。
-- 支持向整个工作组或组内选定终端广播命令和常用组合键，并提供分组独立的命令历史、常用 Linux 候选、自动补全及方向键导航。
-- 支持向单个终端或整个工作组上传文件，默认使用各终端当前目录。
-- 终端标题区显示 WebSocket 延迟，并按延迟自动变色。
-- 右上角系统设置支持调整终端与连接选项，并自定义常用全局快捷键。
-- 操作日志以文本日志形式展示，入口位于右上角。
-- 支持中文和英文界面切换。
+.. code-block:: bash
 
-环境要求
---------
-
-- Python 3.10+
-- 现代浏览器，例如 Chrome、Edge、Firefox、Safari
-- 需要远程 SSH 时，服务端应能访问目标主机的 SSH 端口
-
-安装
-----
-
-开发环境建议直接在项目目录安装依赖：
-
-.. code:: bash
-
-    python -m pip install -r requirements.txt
-
-也可以按包方式安装：
-
-.. code:: bash
-
+    git clone https://github.com/tianyin231/TermFleet-SSH.git
+    cd TermFleet-SSH
     python -m pip install .
-
-启动
-----
-
-默认监听 ``0.0.0.0:8888``：
-
-.. code:: bash
-
-    wssh
-
-指定监听地址和端口：
-
-.. code:: bash
-
-    wssh --address='127.0.0.1' --port=8888
-
-浏览器打开：
-
-.. code::
-
-    http://127.0.0.1:8888
-
-常用启动参数
-------------
-
-.. code:: bash
-
-    # 指定监听地址和端口
-    wssh --address='127.0.0.1' --port=8888
-
-    # 指定 HTTPS 证书
-    wssh --certfile='/path/to/cert.crt' --keyfile='/path/to/cert.key'
-
-    # 指定 SSH host key 策略：reject、autoadd、warning
-    wssh --policy=reject
-
-    # 指定已识别主机使用的 OpenSSH 配置文件
-    wssh --sshconfig='~/.ssh/config'
-
-    # 设置单个客户端最多同时连接的终端数
-    wssh --maxconn=50
-
-    # 设置单个上传文件的最大体积，单位为 MiB
-    wssh --maxupload=100
-
-    # 指定默认字符编码
-    wssh --encoding='utf-8'
-
-    # 查看全部参数
-    wssh --help
-
-使用方式
---------
-
-连接 SSH 主机
-~~~~~~~~~~~~~
-
-在左侧连接面板填写主机名、用户名、端口、密码或私钥文件，并选择目标工作组。点击“连接”后会在目标工作组中创建终端窗口。
-
-界面主题
-~~~~~~~~
-
-顶栏的月亮/太阳按钮用于切换日间与夜间主题，选择会保存在当前浏览器的 ``wssh-theme`` 中并在刷新后恢复。主题只调整工作区、面板、分组和模态框等外围界面，终端窗口及 xterm 配色保持原有黑白风格。
-
-使用 SSH 配置识别主机
-~~~~~~~~~~~~~~~~~~~~~
-
-程序会通过后端读取 OpenSSH 配置文件，默认路径为：
-
-.. code::
-
-    ~/.ssh/config
-
-可以通过启动参数修改：
-
-.. code:: bash
-
-    wssh --sshconfig='/path/to/ssh_config'
-
-点击右上角“主机”按钮，或使用 ``Ctrl+Shift+H``（Windows/Linux）/ ``Command+Shift+H``（macOS）打开主机管理器。顶部的分组条可以切换、新增和快速删除分组；删除分组时，其中的终端会沿用工作区规则移动到相邻分组。左侧显示识别出的主机，右侧显示当前分组已经打开的终端，并可直接重新连接、最大化或关闭终端。切换分组后可以继续打开主机，因此一次打开主机管理器即可向不同分组添加终端。
-
-每台识别主机可以填入、单台打开，也可以自定义勾选多台主机，点击“打开所选”后批量打开到当前分组。
-
-桌面端直接点击即可逐台追加或取消选择，也兼容 ``Ctrl``（Windows/Linux）和 ``Command``（macOS）点击；使用 ``Shift`` 可在保留已有选择的同时连续选择一段主机。
-
-出于安全考虑，前端不会读取或展示私钥内容。私钥路径由后端根据 SSH 配置读取和使用。
-
-管理工作组
-~~~~~~~~~~
-
-顶部“新建分组”可以创建工作组。工作组支持重命名、拖动排序、右下角横向拖拽调整宽度、工作组全屏查看、删除，以及通过图钉固定或取消固定终端清单。
-
-工作组名称、顺序和手动调整后的横向宽度会以 JSON 保存到浏览器 ``localStorage``，刷新后恢复。启用图钉后，该分组的终端清单会随新增、关闭、移动、重命名和高度调整自动更新；页面刷新或服务重启后，系统会重建这些终端窗口。本机终端以及不依赖已保存敏感凭据的 SSH 终端会自动连接；使用密码、TOTP、上传私钥或私钥口令的终端只恢复窗口，并显示“需要重新认证”。点击窗口内的“重新认证”按钮或右上角重新连接按钮，会打开独立认证模态框；补充认证信息后会在原窗口中重连。密码、TOTP、私钥内容和私钥口令不会写入浏览器存储。主面板不进行纵向滚动；分组内的终端列表和终端历史分别保留纵向滚动。
-
-组级重连按钮只处理错误状态且仍持有当前页面重连数据，或无需敏感凭据即可重连的终端。已连接、正在连接及显示“需要重新认证”的终端不会被批量触发。
-
-管理终端窗口
-~~~~~~~~~~~~
-
-每个终端窗口支持拖动到其他工作组、重命名、重新连接、最大化、关闭和手动调整终端高度。
-
-未固定分组仍沿用原有机制：刷新页面后，只恢复仍在当前服务进程中存活的会话。手动关闭窗口会真正断开对应 SSH 会话或本机终端进程。
-
-广播命令
-~~~~~~~~
-
-每个工作组顶部都有广播输入框。输入命令并发送，会按该分组当前的广播范围发送到已连接终端；输入框为空时发送等同于广播 ``Enter``，且不会写入命令历史。
-
-每个终端标题栏提供部分广播选择按钮，分组钉子左侧的分段选择器明确选择“全部”或“已选”范围。默认“全部”模式始终向全组广播，即使卡片仍处于选中状态；“已选”模式只向选中的终端广播，没有选中终端时会阻止发送且不会退回全组。广播范围和终端选择会保存在当前浏览器中并在刷新后恢复；关闭终端或将终端移动到其他分组时会自动清除该终端的选择。分组上传按钮仍按原有规则上传到整个分组，不受广播范围影响。
-
-每个分组最多保存 100 条去重后的广播命令。候选同时包含分组历史和 30 余条只读 Linux 诊断命令，覆盖身份、系统、磁盘、内存、进程、网络、服务、日志和容器，并标明“历史”或“常用”来源。输入内容时按前缀优先自动匹配；按 ``Tab`` 接受当前候选或最佳补全。空输入按 ``↑`` 会在输入框上方展开历史，选中位置固定在紧邻输入框的底部槽位，继续按键时由命令内容滚动；按 ``↓`` 会在输入框下方展开常用候选。位于下方首项时继续按 ``↑``，或位于上方最新项时继续按 ``↓``，会先回到原始输入草稿作为中间过渡位；草稿为空时输入框会显示为空，再按一次相同方向键才进入另一侧候选。按 ``Esc`` 关闭候选并恢复草稿。点击候选只会填入输入框，不会直接发送。
-
-广播历史以 JSON 保存在当前浏览器的 ``wssh-broadcast-history`` 中，不会同步到服务端；删除分组时会同时删除该分组的历史。广播命令可能包含敏感内容，应避免把密码或令牌直接写入命令。
-
-组合键可以通过控制键下拉框发送，例如 ``Ctrl+C``、``Ctrl+D``、``Ctrl+Z``、``Ctrl+L``、``Tab``、``Enter``、``Esc``。
-
-本机终端
-~~~~~~~~
-
-右上角“本机终端”会打开服务端本机 shell。它和 SSH 终端使用相同的窗口、分组、日志、重连和关闭逻辑。
-
-上传文件
-~~~~~~~~
-
-终端右上角的“+”按钮用于向单个终端上传文件；工作组广播栏中的上传按钮会把同一文件依次上传到该组内所有已连接终端。
-
-上传窗口会逐台显示目标目录。应用会为当前 Bash、Zsh 或 Fish 会话安装临时提示符钩子，通过标准 OSC 7 序列上报执行 ``cd`` 后的当前目录；不会修改用户的 shell 配置文件。其他 shell 未上报时，SSH 终端回退到远端主目录，本机终端回退到启动目录。上传前可以单独修改每台终端的绝对路径。
-
-同名文件默认不会覆盖。需要覆盖时，应在上传窗口中明确勾选“覆盖同名文件”。SSH 上传依赖远端 SFTP 服务，单文件默认上限为 100 MiB，可通过系统设置或 ``--maxupload`` 调整。
-
-网络延迟
-~~~~~~~~
-
-终端标题区会显示当前 WebSocket 延迟。低延迟为绿色，中等延迟为黄色，高延迟或离线为红色。
-
-系统设置和日志
-~~~~~~~~~~~~~~
-
-右上角“系统设置”会打开独立设置窗口，支持调整最多终端数、单文件上传上限、终端字号、终端默认高度、广播命令是否自动回车和断开全部前是否确认。
-
-快捷键区域可以为新建连接、固定展开顶栏与侧栏、切换分组广播范围、主机管理、系统设置、操作日志、本机终端和新建分组录制组合键，也可以清空单项绑定或恢复默认值。默认使用 ``Ctrl/Command+Shift+C`` 打开连接模态框、``Ctrl+Alt+P`` 或 ``Command+Option+P`` 切换面板固定模式、``Ctrl+Alt+S`` 或 ``Command+Option+S`` 切换当前聚焦分组的广播范围、``Ctrl/Command+Shift+H`` 打开主机管理器，并使用 ``Ctrl/Command+Shift+,`` 打开系统设置。连接模态框与左侧栏复用同一份表单，关闭后会保留尚未提交的内容。
-
-右上角“日志”会打开全屏操作日志。
-
-Docker
-------
-
-启动：
-
-.. code:: bash
-
-    docker-compose up
-
-停止：
-
-.. code:: bash
-
-    docker-compose down
-
-Nginx 反向代理
---------------
-
-WebSocket 需要透传 Upgrade 头：
-
-.. code:: nginx
-
-    location / {
-        proxy_pass http://127.0.0.1:8888;
-        proxy_http_version 1.1;
-        proxy_read_timeout 300;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Real-PORT $remote_port;
-    }
-
-建议在生产环境启用 HTTPS，并使用 ``--policy=reject`` 配合可信 ``known_hosts``。
-
-测试
-----
-
-.. code:: bash
-
-    python -m unittest discover tests
-
-或：
-
-.. code:: bash
-
-    python -m pytest tests
+    wssh --address=127.0.0.1 --port=8888
+
+Open http://127.0.0.1:8888 on the machine running the service.
+The distribution name and command remain ``webssh`` and ``wssh``;
+``pip install webssh`` is not a substitute for installing this repository.
+
+Usage boundaries
+----------------
+
+Group uploads target all connected terminals in the group, independently of
+broadcast selection. Restoring windows does not preserve sessions across a
+service restart; connections requiring sensitive credentials need reauthentication.
+The local terminal runs on the server, not on the browser's machine.
+Do not expose the service directly to the public internet. Configure access
+authentication, HTTPS and trusted SSH host-key verification for remote access.
+
+Documentation and credits
+-------------------------
+
+* `Project and Chinese introduction <https://github.com/tianyin231/TermFleet-SSH>`_
+* `English introduction <https://github.com/tianyin231/TermFleet-SSH/blob/master/README.en.md>`_
+* `User and deployment guide (Chinese) <https://github.com/tianyin231/TermFleet-SSH/blob/master/docs/usage.md>`_
+* `Issue tracker <https://github.com/tianyin231/TermFleet-SSH/issues>`_
+
+Extended from `huashengdun/webssh <https://github.com/huashengdun/webssh>`_.
+Licensed under MIT; see the LICENSE file. Tornado and Paramiko power the backend,
+and xterm.js provides the browser terminal.
